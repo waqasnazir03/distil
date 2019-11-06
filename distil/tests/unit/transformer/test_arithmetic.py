@@ -18,6 +18,7 @@ import mock
 
 from distil.common.constants import date_format
 from distil.common import general
+from distil.common import openstack
 from distil.tests.unit import base
 from distil.transformer import arithmetic
 
@@ -110,7 +111,7 @@ class TestMaxTransformer(base.DistilTestCase):
 
 
 @mock.patch.object(general, 'get_transformer_config', mock.Mock())
-class TestStorageMaxTransformer(base.DistilTestCase):
+class TestBlockStorageMaxTransformer(base.DistilTestCase):
     def test_all_different_values(self):
         """
         Tests that the transformer correctly grabs the highest value,
@@ -134,7 +135,7 @@ class TestStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.StorageMaxTransformer()
+        xform = arithmetic.BlockStorageMaxTransformer()
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -155,7 +156,7 @@ class TestStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.StorageMaxTransformer()
+        xform = arithmetic.BlockStorageMaxTransformer()
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -171,7 +172,7 @@ class TestStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.StorageMaxTransformer()
+        xform = arithmetic.BlockStorageMaxTransformer()
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -191,13 +192,140 @@ class TestStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.StorageMaxTransformer()
+        xform = arithmetic.BlockStorageMaxTransformer()
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
         self.assertEqual({'some_meter': 27}, usage)
 
 
+@mock.patch.object(general, 'get_transformer_config', mock.Mock())
+class TestObjectStorageMaxTransformer(base.DistilTestCase):
+
+    @mock.patch.object(
+        openstack, 'get_container_policy', mock.Mock(return_value='test-policy'))
+    def test_all_different_values(self):
+        """
+        Tests that the transformer correctly grabs the highest value,
+        when all values are different.
+        """
+
+        data = [
+            {'timestamp': FAKE_DATA.t0, 'volume': 12,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t0_10, 'volume': 3,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t0_20, 'volume': 7,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t0_30, 'volume': 3,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t0_40, 'volume': 25,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t0_50, 'volume': 2,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t1, 'volume': 6,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+        ]
+
+        xform = arithmetic.ObjectStorageMaxTransformer()
+        usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
+                                      FAKE_DATA.t1)
+
+        self.assertEqual({'test-policy': 25}, usage)
+
+    @mock.patch.object(
+        openstack, 'get_container_policy', mock.Mock(return_value='test-policy'))
+    def test_all_same_values(self):
+        """
+        Tests that that transformer correctly grabs any value,
+        when all values are the same.
+        """
+
+        data = [
+            {'timestamp': FAKE_DATA.t0, 'volume': 25,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t0_30, 'volume': 25,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t1, 'volume': 25,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+        ]
+
+        xform = arithmetic.ObjectStorageMaxTransformer()
+        usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
+                                      FAKE_DATA.t1)
+
+        self.assertEqual({'test-policy': 25}, usage)
+
+    @mock.patch.object(
+        openstack, 'get_container_policy', mock.Mock(return_value='test-policy'))
+    def test_none_value(self):
+        """
+        Tests that that transformer correctly handles a None value.
+        """
+
+        data = [
+            {'timestamp': FAKE_DATA.t0, 'volume': None,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+        ]
+
+        xform = arithmetic.ObjectStorageMaxTransformer()
+        usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
+                                      FAKE_DATA.t1)
+
+        self.assertEqual({'test-policy': 0}, usage)
+
+    @mock.patch.object(
+        openstack, 'get_container_policy', mock.Mock(return_value=None))
+    def test_none_and_other_values(self):
+        """
+        Tests that that transformer correctly handles a None value.
+        """
+
+        data = [
+            {'timestamp': FAKE_DATA.t0, 'volume': None,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t0_30, 'volume': 25,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+            {'timestamp': FAKE_DATA.t1, 'volume': 27,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {}},
+        ]
+
+        xform = arithmetic.ObjectStorageMaxTransformer()
+        usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
+                                      FAKE_DATA.t1)
+
+        self.assertEqual({'some_meter': 27}, usage)
+
+
+@mock.patch.object(general, 'get_transformer_config', mock.Mock())
 @mock.patch.object(general, 'get_transformer_config', mock.Mock())
 class TestSumTransformer(base.DistilTestCase):
     def test_basic_sum(self):

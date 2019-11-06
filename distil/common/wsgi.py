@@ -19,6 +19,8 @@
 """Utility methods for working with WSGI servers."""
 
 import datetime
+import six
+
 from xml.dom import minidom
 from xml.parsers import expat
 
@@ -61,7 +63,7 @@ class JSONDictSerializer(DictSerializer):
             if isinstance(obj, datetime.datetime):
                 _dtime = obj - datetime.timedelta(microseconds=obj.microsecond)
                 return _dtime.isoformat()
-            return unicode(obj)
+            return six.text_type(obj)
         return jsonutils.dumps(data, default=sanitizer)
 
 

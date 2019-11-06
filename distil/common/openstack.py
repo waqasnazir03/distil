@@ -150,3 +150,27 @@ def get_volume_type(volume_type):
             return vtype['name']
 
     return None
+
+
+@general.disable_ssl_warnings
+def get_object_storage_url(project_id):
+    ks = get_keystone_client()
+    try:
+        endpoint = ks.endpoints.list(
+            service=ks.services.list(type="object-store")[0],
+            interface="public",
+            region=CONF.keystone_authtoken.region_name)[0]
+        return endpoint.url % {'tenant_id': project_id}
+    except KeyError:
+        return None
+
+
+@general.disable_ssl_warnings
+def get_container_policy(project_id, container_name):
+    sess = _get_keystone_session()
+    url = get_object_storage_url(project_id)
+    if url:
+        resp = sess.head("%s/%s" % (url, container_name))
+        if resp:
+            return resp.headers.get('X-Storage-Policy')
+    return None

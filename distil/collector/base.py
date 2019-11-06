@@ -223,7 +223,7 @@ class BaseCollector(object):
                 # hashing the name only for swift to get a consistent
                 # id for swift billing. Another change will be proposed to
                 # openstack-billing to handle this case as well.
-                if 'o1.standard' in transformed:
+                if mapping['type'] == "Object Storage Container":
                     res_id = hashlib.md5(res_id.encode('utf-8')).hexdigest()
 
                 LOG.debug(

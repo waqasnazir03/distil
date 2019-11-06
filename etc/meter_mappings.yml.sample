@@ -35,7 +35,7 @@
   meter: volume.size
   service: b1.standard
   type: Volume
-  transformer: max
+  transformer: blockstoragemax
   unit: gigabyte
   metadata:
     name:
@@ -152,7 +152,7 @@
   meter: storage.containers.objects.size
   service: o1.standard
   type: Object Storage Container
-  transformer: max
+  transformer: objectstoragemax
   unit: byte
   # NOTE(flwang): Nothing in resource_metadata from ceilometer actually.
   # But to avoid any unnecessary issue and keeping consistency. Just keep
