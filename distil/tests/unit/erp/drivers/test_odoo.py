@@ -58,7 +58,7 @@ class TestOdooDriver(base.DistilTestCase):
     def test_get_products(self, mock_odoo):
         odoodriver = odoo.OdooDriver(self.conf)
         odoodriver.product.search.return_value = []
-        odoodriver.product.read.return_value = PRODUCTS
+        odoodriver.product.read.side_effect = [PRODUCTS, []]
 
         products = odoodriver.get_products(regions=['nz_1'])
 
@@ -68,14 +68,17 @@ class TestOdooDriver(base.DistilTestCase):
                     'block storage': [{'description': 'Block storage',
                                        'rate': 0.00035,
                                        'name': 'b1.volume',
+                                       'full_name': 'NZ-1.b1.volume',
                                        'unit': 'hour'}],
                     'compute': [{'description': '1 CPU, 1GB RAM',
                                  'rate': 0.00015,
                                  'name': 'c1.c1r1',
+                                 'full_name': 'NZ-1.c1.c1r1',
                                  'unit': 'hour'}],
                     'network': [{'description': 'Router',
                                  'rate': 0.00025,
                                  'name': 'n1.router',
+                                 'full_name': 'NZ-1.n1.router',
                                  'unit': 'hour'}]
                 }
             },
@@ -270,12 +273,14 @@ class TestOdooDriver(base.DistilTestCase):
                 'Compute': [
                     {
                         'name': 'c1.c2r16', 'description': 'c1.c2r16',
+                        'full_name': 'NZ-1.c1.c2r16',
                         'rate': 0.01, 'unit': 'hour'
                     }
                 ],
                 'Block Storage': [
                     {
                         'name': 'b1.standard', 'description': 'b1.standard',
+                        'full_name': 'NZ-1.b1.standard',
                         'rate': 0.02, 'unit': 'gigabyte'
                     }
                 ]
@@ -326,12 +331,14 @@ class TestOdooDriver(base.DistilTestCase):
                 'Compute': [
                     {
                         'name': 'c1.c2r16', 'description': 'c1.c2r16',
+                        'full_name': 'NZ-1.c1.c2r16',
                         'rate': 0.01, 'unit': 'hour'
                     }
                 ],
                 'Block Storage': [
                     {
                         'name': 'b1.standard', 'description': 'b1.standard',
+                        'full_name': 'NZ-1.b1.standard',
                         'rate': 0.02, 'unit': 'gigabyte'
                     }
                 ]
@@ -417,19 +424,23 @@ class TestOdooDriver(base.DistilTestCase):
                 'Compute': [
                     {
                         'name': 'c1.c2r16', 'description': 'c1.c2r16',
+                        'full_name': 'NZ-1.c1.c2r16',
                         'rate': 0.01, 'unit': 'hour'
                     },
                     {
                         'name': 'c1.c4r32', 'description': 'c1.c4r32',
+                        'full_name': 'NZ-1.c1.c4r32',
                         'rate': 0.04, 'unit': 'hour'
                     },
                     {
                         'name': 'c1.c2r16-windows',
+                        'full_name': 'NZ-1.c1.c2r16-windows',
                         'description': 'c1.c2r16-windows',
                         'rate': 0.02, 'unit': 'hour'
                     },
                     {
                         'name': 'c1.c4r32-sql-server-standard-windows',
+                        'full_name': 'NZ-1.c1.c4r32-sql-server-standard-windows',
                         'description': 'c1.c4r32-sql-server-standard-windows',
                         'rate': 0.04, 'unit': 'hour'
                     }
@@ -437,6 +448,7 @@ class TestOdooDriver(base.DistilTestCase):
                 'Block Storage': [
                     {
                         'name': 'b1.standard', 'description': 'b1.standard',
+                        'full_name': 'NZ-1.b1.standard',
                         'rate': 0.02, 'unit': 'gigabyte'
                     }
                 ]

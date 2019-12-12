@@ -90,12 +90,6 @@ ODOO_OPTS = [
                help='Region name mappings between Keystone and Odoo. For '
                     'example, '
                     'region_mapping=region1:RegionOne,region2:RegionTwo'),
-    cfg.StrOpt('object_storage_product_name',
-               default='NZ.o1.standard',
-               help='Product name in Odoo for object storage.'),
-    cfg.StrOpt('object_storage_service_name',
-               default='o1.standard',
-               help='Service name for object storage.'),
     cfg.ListOpt('extra_product_category_list',
                 default=[],
                 help='Additional product categories which should be easily '

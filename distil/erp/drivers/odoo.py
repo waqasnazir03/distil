@@ -157,41 +157,59 @@ class OdooDriver(driver.BaseDriver):
 
                     prices[actual_region][category.lower()].append(
                         {'name': name,
+                         'full_name': product['name_template'],
                          'rate': rate,
                          'unit': unit,
                          'description': desc}
                     )
 
-            # Handle object storage product that does not belong to any
-            # region in odoo.
-            obj_p_name = self.conf.odoo.object_storage_product_name
-            obj_s_name = self.conf.odoo.object_storage_service_name
+            # Handle object storage products
+            c = self.category.search([('name', '=', OBJECTSTORAGE_CATEGORY)])
+            product_ids = self.product.search([('categ_id', 'in', c),
+                                               ('sale_ok', '=', True),
+                                               ('active', '=', True)])
+            products = self.product.read(product_ids, fields=product_fields)
 
-            obj_pids = self.product.search(
-                [('name_template', '=', obj_p_name),
-                 ('sale_ok', '=', True),
-                 ('active', '=', True)]
-            )
+            for product in products:
+                product_region = None
+                for region in odoo_regions:
+                    if region.upper() in product['name_template']:
+                        product_region = region
 
-            if len(obj_pids) > 0:
-                obj_p = self.product.read(obj_pids[0],
-                                          fields=["lst_price", "default_code",
-                                                  "description"])
-                self.product_category_mapping[obj_pids[0]] = \
-                    OBJECTSTORAGE_CATEGORY
-                for region in regions:
-                    # Ensure returned region name is same with what user see
-                    # from Keystone.
+                category = product['categ_id'][1].split('/')[-1].strip()
+
+                name = product['name_template'].lower()
+
+                rate = round(product['lst_price'], constants.RATE_DIGITS)
+                # NOTE(flwang): default_code is Internal Reference on
+                # Odoo GUI
+                unit = product['default_code']
+                desc = product['description']
+                self.product_unit_mapping[product['id']] = unit
+
+                product_dict = {
+                    'name': name,
+                    'full_name': product['name_template'],
+                    'rate': rate,
+                    'unit': unit,
+                    'description': desc
+                }
+
+                if product_region:
+                    # add it to just the one region
                     actual_region = self.reverse_region_mapping.get(
-                        region, region)
+                        product_region, product_region)
 
-                    prices[actual_region]['object storage'].append(
-                        {'name': obj_s_name,
-                         'rate': round(obj_p["lst_price"],
-                                       constants.RATE_DIGITS),
-                         'unit': obj_p["default_code"],
-                         'description': obj_p["description"]}
-                    )
+                    prices[actual_region][category.lower()].append(
+                        product_dict)
+                else:
+                    # add it to all regions
+                    for region in odoo_regions:
+                        actual_region = self.reverse_region_mapping.get(
+                            region, region)
+
+                        prices[actual_region][category.lower()].append(
+                            product_dict)
         except odoorpc.error.Error as e:
             LOG.exception(e)
             return {}
@@ -392,25 +410,51 @@ class OdooDriver(driver.BaseDriver):
         """Get service price information from price definitions."""
         price = {'service_name': service_name}
 
+        # NOTE(adriant): We do this to handle the object storage policy
+        #                name to product translation
+        formatted_name = service_name.lower().replace("--", ".")
+
         if service_type in products:
             for s in products[service_type]:
-                if s['name'] == service_name:
-                    price.update({'rate': s['rate'], 'unit': s['unit']})
+                if s['name'] == formatted_name:
+                    price.update({
+                        'rate': s['rate'], 'unit': s['unit'],
+                        'product_name': s['full_name']})
                     break
         else:
             found = False
             for category, services in products.items():
                 for s in services:
-                    if s['name'] == service_name:
-                        price.update({'rate': s['rate'], 'unit': s['unit']})
+                    if s['name'] == formatted_name:
+                        price.update({
+                            'rate': s['rate'], 'unit': s['unit'],
+                            'product_name': s['full_name']})
                         found = True
                         break
 
             if not found:
+                for category, services in products.items():
+                    for s in services:
+                        # NOTE(adriant): this will find a partial match like:
+                        #                  'o1.standard' in 'NZ.o1.standard'
+                        if formatted_name in s['name']:
+                            price.update({
+                                'rate': s['rate'], 'unit': s['unit'],
+                                'product_name': s['full_name']})
+                            found = True
+                            break
+
+            if not found:
                 raise exceptions.NotFoundException(
                     'Price not found, service name: %s, service type: %s' %
-                    (service_name, service_type)
+                    (formatted_name, service_type)
                 )
+
+        if 'unit' in price and not price['unit']:
+            raise exceptions.ERPException(
+                "Product: %s is missing 'unit' definition." %
+                formatted_name
+            )
 
         return price
 
@@ -454,8 +498,6 @@ class OdooDriver(driver.BaseDriver):
         total_cost = 0
         price_mapping = {}
         cost_details = {}
-
-        odoo_region = self.region_mapping.get(region, region).upper()
 
         resources_info = {}
         for row in resources:
@@ -517,14 +559,12 @@ class OdooDriver(driver.BaseDriver):
             total_cost += cost
 
             if detailed:
-                odoo_service_name = "%s.%s" % (odoo_region, service_name)
-
                 cost_details[service_type]['total_cost'] = round(
                     (cost_details[service_type]['total_cost'] + cost),
                     constants.PRICE_DIGITS
                 )
                 cost_details[service_type]['breakdown'][
-                    odoo_service_name
+                    price_spec['product_name']
                 ].append(
                     {
                         "resource_name": resource.get('name', ''),
