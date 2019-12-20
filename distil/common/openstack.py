@@ -19,6 +19,7 @@ from ceilometerclient import client as ceilometerclient
 from cinderclient.v2 import client as cinderclient
 from glanceclient import client as glanceclient
 from keystoneauth1.identity import v3
+from keystoneauth1.exceptions import NotFound
 from keystoneauth1 import session
 from keystoneclient.v3 import client as ks_client
 from novaclient import client as novaclient
@@ -170,7 +171,10 @@ def get_container_policy(project_id, container_name):
     sess = _get_keystone_session()
     url = get_object_storage_url(project_id)
     if url:
-        resp = sess.head("%s/%s" % (url, container_name))
-        if resp:
-            return resp.headers.get('X-Storage-Policy')
+        try:
+            resp = sess.head("%s/%s" % (url, container_name))
+            if resp:
+                return resp.headers.get('X-Storage-Policy')
+        except NotFound:
+            return None
     return None
