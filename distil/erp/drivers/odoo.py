@@ -45,7 +45,7 @@ SLA_DISCOUNT_CATEGORY = "SLA Discount"
 class OdooDriver(driver.BaseDriver):
     def __init__(self, conf):
         self.PRODUCT_CATEGORY = [COMPUTE_CATEGORY, NETWORK_CATEGORY,
-                                 BLOCKSTORAGE_CATEGORY, OBJECTSTORAGE_CATEGORY,
+                                 BLOCKSTORAGE_CATEGORY,
                                  DISCOUNTS_CATEGORY, PREMIUM_SUPPORT, SUPPORT,
                                  SLA_DISCOUNT_CATEGORY] + \
             conf.odoo.extra_product_category_list
@@ -171,11 +171,6 @@ class OdooDriver(driver.BaseDriver):
             products = self.product.read(product_ids, fields=product_fields)
 
             for product in products:
-                product_region = None
-                for region in odoo_regions:
-                    if region.upper() in product['name_template']:
-                        product_region = region
-
                 category = product['categ_id'][1].split('/')[-1].strip()
 
                 name = product['name_template'].lower()
@@ -195,21 +190,13 @@ class OdooDriver(driver.BaseDriver):
                     'description': desc
                 }
 
-                if product_region:
-                    # add it to just the one region
+                # add swift products to all regions
+                for region in odoo_regions:
                     actual_region = self.reverse_region_mapping.get(
-                        product_region, product_region)
+                        region, region)
 
                     prices[actual_region][category.lower()].append(
                         product_dict)
-                else:
-                    # add it to all regions
-                    for region in odoo_regions:
-                        actual_region = self.reverse_region_mapping.get(
-                            region, region)
-
-                        prices[actual_region][category.lower()].append(
-                            product_dict)
         except odoorpc.error.Error as e:
             LOG.exception(e)
             return {}
