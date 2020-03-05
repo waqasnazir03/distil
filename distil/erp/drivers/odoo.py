@@ -172,6 +172,7 @@ class OdooDriver(driver.BaseDriver):
 
             for product in products:
                 category = product['categ_id'][1].split('/')[-1].strip()
+                self.product_category_mapping[product['id']] = category
 
                 name = product['name_template'].lower()
 
