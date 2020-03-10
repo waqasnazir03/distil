@@ -117,7 +117,8 @@ class CollectorService(service.Service):
                      "max_windows_per_cycle<=0.")
             return
 
-        projects = openstack.get_projects()
+        projects = openstack.get_projects(
+            domains=CONF.collector.include_domains)
         valid_projects = filter_projects(projects)
         project_ids = [p['id'] for p in valid_projects]
 

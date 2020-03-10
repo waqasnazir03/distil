@@ -96,10 +96,36 @@ def get_nova_client():
 
 
 @general.disable_ssl_warnings
-def get_projects():
+def get_domain(domain):
     keystone = get_keystone_client()
+    try:
+        domain_obj = keystone.domains.get(domain)
+    except NotFound:
+        domains = keystone.domains.list(name=domain)
+        if not domains:
+            raise
+        domain_obj = domains[0]
 
-    return [obj.to_dict() for obj in keystone.projects.list()]
+    return domain_obj
+
+
+@general.disable_ssl_warnings
+def get_projects(domains=None):
+    keystone = get_keystone_client()
+    if not domains:
+        return [obj.to_dict() for obj in keystone.projects.list()]
+
+    domain_objs = {}
+    for domain in domains:
+        domain_obj = get_domain(domain)
+        domain_objs[domain_obj.id] = domain_obj
+
+    projects = []
+
+    for domain_obj in domain_objs.values():
+        projects += [
+            obj.to_dict() for obj in keystone.projects.list(domain=domain_obj)]
+    return projects
 
 
 @general.disable_ssl_warnings
