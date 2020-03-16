@@ -111,6 +111,7 @@ class CollectorService(service.Service):
 
     def collect_usage(self):
         LOG.info("Starting to collect usage...")
+        collection_start = datetime.utcnow()
 
         if CONF.collector.max_windows_per_cycle <= 0:
             LOG.info("Finished collecting usage with configuration "
@@ -173,6 +174,9 @@ class CollectorService(service.Service):
                 LOG.warning('Get lock failed. Process: %s' % self.identifier)
 
         LOG.info("Finished collecting usage for %s projects." % success_count)
+        collection_end = datetime.utcnow()
+        collection_taken = collection_end - collection_start
+        LOG.info("Collection time was: %ss." % collection_taken.seconds)
 
         # If we start distil-collector manually with 'collect_end_time' param
         # specified, the service should be stopped automatically after all
