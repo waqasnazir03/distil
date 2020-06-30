@@ -17,12 +17,14 @@ import re
 
 from ceilometerclient import client as ceilometerclient
 from cinderclient.v2 import client as cinderclient
+from cinderclient.exceptions import NotFound as CinderNotFound
 from glanceclient import client as glanceclient
 from keystoneauth1.identity import v3
 from keystoneauth1.exceptions import NotFound
 from keystoneauth1 import session
 from keystoneclient.v3 import client as ks_client
 from novaclient import client as novaclient
+from novaclient.exceptions import NotFound as NovaNotFound
 from oslo_config import cfg
 
 from distil.common import cache as distil_cache
@@ -30,7 +32,7 @@ from distil.common import general
 
 CONF = cfg.CONF
 KS_SESSION = None
-cache = defaultdict(list)
+cache = defaultdict(dict)
 ROOT_DEVICE_PATTERN = re.compile('^/dev/(x?v|s|h)da1?$')
 
 
@@ -163,20 +165,43 @@ def get_root_volume(instance_id):
 
 
 @general.disable_ssl_warnings
-def get_volume_type(volume_type):
-    if not cache.get("volume_types"):
+def get_flavor_name(flavor_id):
+    if flavor_id not in cache["flavors"]:
+        nova = get_nova_client()
+        try:
+            flavor_name = nova.flavors.get(flavor_id).name
+        except NovaNotFound:
+            return None
+        cache["flavors"][flavor_id] = flavor_name
+    return cache["flavors"][flavor_id]
+
+
+@general.disable_ssl_warnings
+def get_volume_type_for_volume(volume_id):
+    if volume_id not in cache["volume_id_to_type"]:
         cinder = get_cinder_client()
-        for vtype in cinder.volume_types.list():
-            cache['volume_types'].append({'id': vtype.id, 'name': vtype.name})
+        try:
+            vol = cinder.volumes.get(volume_id)
+        except CinderNotFound:
+            return None
+        cache["volume_id_to_type"][volume_id] = vol.volume_type
+    return cache["volume_id_to_type"][volume_id]
 
-    for vtype in cache['volume_types']:
-        # check name first, as that will be more common
-        if vtype['name'] == volume_type:
-            return volume_type
-        elif vtype['id'] == volume_type:
-            return vtype['name']
 
-    return None
+@general.disable_ssl_warnings
+def get_volume_type_name(volume_type):
+    if volume_type not in cache["volume_types"]:
+        cinder = get_cinder_client()
+        try:
+            vtype = cinder.volume_types.get(volume_type)
+        except CinderNotFound:
+            try:
+                vtype = cinder.volume_types.find(name=volume_type)
+            except CinderNotFound:
+                return None
+        cache["volume_types"][vtype.id] = vtype.name
+        cache["volume_types"][vtype.name] = vtype.name
+    return cache["volume_types"][volume_type]
 
 
 @general.disable_ssl_warnings

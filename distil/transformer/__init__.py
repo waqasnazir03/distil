@@ -20,8 +20,10 @@ from distil.common import general
 
 class BaseTransformer(object):
 
-    def __init__(self, *args, **kwargs):
-        self.config = general.get_transformer_config()
+    def __init__(self, name, override_config=None):
+        self.config = general.get_transformer_config(name)
+        if override_config:
+            self.config.update(override_config)
 
     def transform_usage(self, meter_name, raw_data, start_at, end_at):
         return self._transform_usage(meter_name, raw_data, start_at, end_at)
@@ -35,5 +37,6 @@ def get_transformer(name, **kwargs):
         'distil.transformer',
         name,
         invoke_on_load=True,
+        invoke_args=(name,),
         invoke_kwds=kwargs
     ).driver

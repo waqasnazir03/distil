@@ -253,3 +253,48 @@
       sources:
         - name
 
+-
+  meter: database.instance
+  type: Database Instance
+  transformer: databaseuptime
+  unit: second
+  metadata:
+    name:
+      sources:
+        - name
+    datastore:
+      sources:
+        - datastore
+
+-
+  meter: database.instance
+  service: b1.standard
+  type: Database Volume
+  transformer: databasevolumemax
+  unit: gigabyte
+  res_id_template: "%s-volume"
+  metadata:
+    name:
+      sources:
+        - name
+      template: "%s - volume"
+    datastore:
+      sources:
+        - datastore
+
+-
+  meter: database.instance
+  type: Database Management
+  transformer: databasemanagementuptime
+  transformer_config:
+    service_name: d1.management
+  unit: second
+  res_id_template: "%s-management"
+  metadata:
+    name:
+      sources:
+        - name
+      template: "%s - Management Fee"
+    datastore:
+      sources:
+        - datastore

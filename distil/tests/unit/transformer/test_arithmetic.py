@@ -20,7 +20,7 @@ from distil.common.constants import date_format
 from distil.common import general
 from distil.common import openstack
 from distil.tests.unit import base
-from distil.transformer import arithmetic
+from distil.transformer import get_transformer
 
 p = lambda t: datetime.datetime.strptime(t, date_format)
 
@@ -53,7 +53,7 @@ class TestMaxTransformer(base.DistilTestCase):
             {'timestamp': FAKE_DATA.t1.isoformat(), 'volume': 6},
         ]
 
-        xform = arithmetic.MaxTransformer()
+        xform = get_transformer('max')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -71,7 +71,7 @@ class TestMaxTransformer(base.DistilTestCase):
             {'timestamp': FAKE_DATA.t1, 'volume': 25},
         ]
 
-        xform = arithmetic.MaxTransformer()
+        xform = get_transformer('max')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -86,7 +86,7 @@ class TestMaxTransformer(base.DistilTestCase):
             {'timestamp': FAKE_DATA.t0, 'volume': None},
         ]
 
-        xform = arithmetic.MaxTransformer()
+        xform = get_transformer('max')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -103,7 +103,7 @@ class TestMaxTransformer(base.DistilTestCase):
             {'timestamp': FAKE_DATA.t1, 'volume': 27},
         ]
 
-        xform = arithmetic.MaxTransformer()
+        xform = get_transformer('max')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -135,7 +135,7 @@ class TestBlockStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.BlockStorageMaxTransformer()
+        xform = get_transformer('storagemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -156,7 +156,7 @@ class TestBlockStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.BlockStorageMaxTransformer()
+        xform = get_transformer('storagemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -172,7 +172,7 @@ class TestBlockStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.BlockStorageMaxTransformer()
+        xform = get_transformer('storagemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -192,7 +192,7 @@ class TestBlockStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.BlockStorageMaxTransformer()
+        xform = get_transformer('storagemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -241,7 +241,7 @@ class TestObjectStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.ObjectStorageMaxTransformer()
+        xform = get_transformer('objectstoragemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -270,7 +270,7 @@ class TestObjectStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.ObjectStorageMaxTransformer()
+        xform = get_transformer('objectstoragemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -290,7 +290,7 @@ class TestObjectStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.ObjectStorageMaxTransformer()
+        xform = get_transformer('objectstoragemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -318,7 +318,7 @@ class TestObjectStorageMaxTransformer(base.DistilTestCase):
              'metadata': {}},
         ]
 
-        xform = arithmetic.ObjectStorageMaxTransformer()
+        xform = get_transformer('objectstoragemax')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -339,7 +339,7 @@ class TestSumTransformer(base.DistilTestCase):
             {'timestamp': '2014-01-01T01:00:00', 'volume': 1},
         ]
 
-        xform = arithmetic.SumTransformer()
+        xform = get_transformer('sum')
         usage = xform.transform_usage('fake_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -354,7 +354,7 @@ class TestSumTransformer(base.DistilTestCase):
             {'timestamp': FAKE_DATA.t0.isoformat(), 'volume': None},
         ]
 
-        xform = arithmetic.SumTransformer()
+        xform = get_transformer('sum')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
@@ -371,8 +371,58 @@ class TestSumTransformer(base.DistilTestCase):
             {'timestamp': FAKE_DATA.t0_50.isoformat(), 'volume': 25},
         ]
 
-        xform = arithmetic.SumTransformer()
+        xform = get_transformer('sum')
         usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
                                       FAKE_DATA.t1)
 
         self.assertEqual({'some_meter': 50}, usage)
+
+
+@mock.patch.object(general, 'get_transformer_config', mock.Mock())
+class TestDatabaseVolumeMaxTransformer(base.DistilTestCase):
+
+    @mock.patch.object(
+        openstack, 'get_volume_type_for_volume',
+        mock.Mock(return_value='b1.nvme1000'))
+    def test_all_different_values(self):
+        """
+        Tests that the transformer correctly grabs the highest value,
+        when all values are different.
+        """
+
+        data = [
+            {'timestamp': FAKE_DATA.t0, 'volume': 1,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {'volume.size': '24', 'volume_id': 'vol_id'}},
+            {'timestamp': FAKE_DATA.t0_10, 'volume': 1,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {'volume.size': '13', 'volume_id': 'vol_id'}},
+            {'timestamp': FAKE_DATA.t0_20, 'volume': 1,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {'volume.size': '7', 'volume_id': 'vol_id'}},
+            {'timestamp': FAKE_DATA.t0_30, 'volume': 1,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {'volume.size': '13', 'volume_id': 'vol_id'}},
+            {'timestamp': FAKE_DATA.t0_40, 'volume': 1,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {'volume.size': '3', 'volume_id': 'vol_id'}},
+            {'timestamp': FAKE_DATA.t0_50, 'volume': 1,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {'volume.size': '25', 'volume_id': 'vol_id'}},
+            {'timestamp': FAKE_DATA.t1, 'volume': 1,
+             'resource_id': '55d37509be3142de963caf82a9c7c447/stuff',
+             'project_id': '55d37509be3142de963caf82a9c7c447',
+             'metadata': {'volume.size': '13', 'volume_id': 'vol_id'}},
+        ]
+
+        xform = get_transformer('databasevolumemax')
+        usage = xform.transform_usage('some_meter', data, FAKE_DATA.t0,
+                                      FAKE_DATA.t1)
+
+        self.assertEqual({'b1.nvme1000': 25}, usage)

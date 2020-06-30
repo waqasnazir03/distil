@@ -40,7 +40,7 @@ class UpTimeTransformer(BaseTransformer):
 
     def _transform_usage(self, name, data, start, end):
         # get tracked states from config
-        tracked = self.config['uptime']['tracked_states']
+        tracked = self.config['tracked_states']
 
         usage_dict = {}
 
@@ -118,10 +118,10 @@ class FromImageTransformer(BaseTransformer):
     """
 
     def _transform_usage(self, name, data, start, end):
-        checks = self.config['from_image']['md_keys']
-        none_values = self.config['from_image']['none_values']
-        service = self.config['from_image']['service']
-        size_sources = self.config['from_image']['size_keys']
+        checks = self.config['md_keys']
+        none_values = self.config['none_values']
+        service = self.config['service']
+        size_sources = self.config['size_keys']
 
         size = 0
         for entry in data:
@@ -183,3 +183,54 @@ class MagnumTransformer(BaseTransformer):
         hours = (end - start).total_seconds() / 3600.0
         return {name: max_vol * hours}
 
+
+class DatabaseUpTimeTransformer(UpTimeTransformer):
+    """
+    Transformer to calculate uptime based on states,
+    which is broken apart into flavor at point in time.
+    """
+
+    def _clean_entry(self, entry):
+        try:
+            timestamp = datetime.strptime(
+                entry['timestamp'], constants.date_format)
+        except ValueError:
+            timestamp = datetime.strptime(
+                entry['timestamp'], constants.date_format_f)
+
+        flavor = openstack.get_flavor_name(
+            entry['metadata'].get('flavor.id'))
+
+        result = {
+            'status': entry['metadata'].get('status'),
+            'flavor': flavor,
+            'timestamp': timestamp
+        }
+
+        return result
+
+
+class DatabaseManagementUpTimeTransformer(UpTimeTransformer):
+    """
+    Transformer to calculate uptime based on states,
+    which is broken apart into flavor at point in time.
+    """
+
+    def _clean_entry(self, entry):
+        management_service_name = self.config.get(
+            'service_name', 'd1.management')
+
+        try:
+            timestamp = datetime.strptime(
+                entry['timestamp'], constants.date_format)
+        except ValueError:
+            timestamp = datetime.strptime(
+                entry['timestamp'], constants.date_format_f)
+
+        result = {
+            'status': entry['metadata'].get('status'),
+            'flavor': management_service_name,
+            'timestamp': timestamp
+        }
+
+        return result

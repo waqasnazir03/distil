@@ -59,7 +59,7 @@ class BlockStorageMaxTransformer(MaxTransformer):
 
         if "volume_type" in data[-1]['metadata']:
             vtype = data[-1]['metadata']['volume_type']
-            service = openstack.get_volume_type(vtype)
+            service = openstack.get_volume_type_name(vtype)
             if not service:
                 service = name
         else:
@@ -67,6 +67,30 @@ class BlockStorageMaxTransformer(MaxTransformer):
 
         hours = (end - start).total_seconds() / 3600.0
         return {service: max_vol * hours}
+
+
+class DatabaseVolumeMaxTransformer(BaseTransformer):
+    """
+    Variantion on the GaugeMax Transformer that checks for
+    volume_type and uses that as the service, or uses the
+    default service name.
+
+    It also gets the actual volume size from metadata.
+    """
+
+    def _transform_usage(self, name, data, start, end):
+        if not data:
+            return None
+
+        max_vol = max([int(v["metadata"]["volume.size"]) for v in data])
+
+        volume_type = openstack.get_volume_type_for_volume(
+            data[-1]['metadata']['volume_id'])
+        if not volume_type:
+            return None
+
+        hours = (end - start).total_seconds() / 3600.0
+        return {volume_type: max_vol * hours}
 
 
 class ObjectStorageMaxTransformer(MaxTransformer):

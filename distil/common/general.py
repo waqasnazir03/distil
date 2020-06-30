@@ -33,7 +33,7 @@ LOG = logging.getLogger(__name__)
 _TRANS_CONFIG = None
 
 
-def get_transformer_config():
+def get_transformer_config(name):
     global _TRANS_CONFIG
 
     if not _TRANS_CONFIG:
@@ -43,7 +43,7 @@ def get_transformer_config():
         except IOError as e:
             raise e
 
-    return _TRANS_CONFIG
+    return _TRANS_CONFIG.get(name, {})
 
 
 def get_windows(start, end):

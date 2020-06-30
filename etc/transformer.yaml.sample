@@ -11,7 +11,7 @@ uptime:
     - suspended
     - shutoff
     - stopped
-from_image:
+fromimage:
   service: b1.standard
   # What metadata values to check
   md_keys:
@@ -23,3 +23,30 @@ from_image:
   # where to get volume size from
   size_keys:
     - root_gb
+databaseuptime:
+  tracked_states:
+    - HEALTHY
+    - ACTIVE
+    - BLOCKED
+    - REBOOT
+    - RESIZE
+    - BACKUP
+    - SHUTDOWN
+    - RESTART_REQUIRED
+    - PROMOTE
+    - EJECT
+    - UPGRADE
+    - DETACH
+databasemanagementuptime:
+    - HEALTHY
+    - ACTIVE
+    - BLOCKED
+    - REBOOT
+    - RESIZE
+    - BACKUP
+    - SHUTDOWN
+    - RESTART_REQUIRED
+    - PROMOTE
+    - EJECT
+    - UPGRADE
+    - DETACH

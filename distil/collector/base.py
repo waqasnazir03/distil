@@ -205,7 +205,9 @@ class BaseCollector(object):
         service = (mapping['service'] if 'service' in mapping
                    else mapping['meter'])
 
-        transformer = d_transformer.get_transformer(mapping['transformer'])
+        transformer = d_transformer.get_transformer(
+            mapping['transformer'],
+            override_config=mapping.get('transformer_config', {}))
 
         for res_id, entries in usage_by_resource.items():
             transformed = transformer.transform_usage(
