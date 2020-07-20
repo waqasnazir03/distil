@@ -33,8 +33,8 @@ class FAKE_DATA:
     # and one outside the window
     tpre = p('2013-12-31T23:50:00')
 
-    flavor = '1'
-    flavor2 = '2'
+    flavor = 'c1.c1r1'
+    flavor2 = 'c1.c2r2'
 
 
 FAKE_CONFIG = {
@@ -601,7 +601,9 @@ class TestDatabaseManagementUpTimeTransformer(base.DistilTestCase):
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
 
-        self.assertEqual({"d1.managment": 3600}, result)
+        management_service = "db." + FAKE_DATA.flavor
+
+        self.assertEqual({management_service: 3600}, result)
 
     @mock.patch.object(
         openstack, 'get_flavor_name',
@@ -650,4 +652,6 @@ class TestDatabaseManagementUpTimeTransformer(base.DistilTestCase):
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
 
-        self.assertEqual({"d1.managment": 1800}, result)
+        management_service = "db." + FAKE_DATA.flavor
+
+        self.assertEqual({management_service: 1800}, result)

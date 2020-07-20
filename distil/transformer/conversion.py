@@ -188,6 +188,11 @@ class DatabaseUpTimeTransformer(UpTimeTransformer):
     """
     Transformer to calculate uptime based on states,
     which is broken apart into flavor at point in time.
+
+    Same as the normal instance uptime transformer, but the
+    status and flavor are pulled from different locations
+    in the metadata as database instance samples have a
+    different format.
     """
 
     def _clean_entry(self, entry):
@@ -214,11 +219,17 @@ class DatabaseManagementUpTimeTransformer(UpTimeTransformer):
     """
     Transformer to calculate uptime based on states,
     which is broken apart into flavor at point in time.
+
+    While this uses the base uptime logic, the service name
+    here needs to be a variant of the flavor prefixed with
+    a database specific value. In this case 'db.' which will
+    mean a flavor of 'c1.c1r2' will become 'db.c1.c1r2' for the
+    service in the usage sample.
     """
 
     def _clean_entry(self, entry):
-        management_service_name = self.config.get(
-            'service_name', 'd1.management')
+        management_prefix = self.config.get(
+            'prefix', 'db.')
 
         try:
             timestamp = datetime.strptime(
@@ -226,6 +237,11 @@ class DatabaseManagementUpTimeTransformer(UpTimeTransformer):
         except ValueError:
             timestamp = datetime.strptime(
                 entry['timestamp'], constants.date_format_f)
+
+        flavor = openstack.get_flavor_name(
+            entry['metadata'].get('flavor.id'))
+
+        management_service_name = management_prefix + flavor
 
         result = {
             'status': entry['metadata'].get('status'),

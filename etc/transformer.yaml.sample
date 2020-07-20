@@ -38,6 +38,8 @@ databaseuptime:
     - UPGRADE
     - DETACH
 databasemanagementuptime:
+  prefix: "db."
+  tracked_states:
     - HEALTHY
     - ACTIVE
     - BLOCKED
