@@ -43,7 +43,8 @@ def get_health():
     """
     result = {}
 
-    projects_keystone = openstack.get_projects()
+    projects_keystone = openstack.get_projects(
+        domains=CONF.collector.include_domains)
     keystone_projects = [t['id'] for t in projects_keystone
                          if t['name'] not in CONF.collector.ignore_tenants]
 
