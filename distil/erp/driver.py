@@ -1,4 +1,4 @@
-# Copyright 2017 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,14 +45,14 @@ class BaseDriver(object):
         raise NotImplementedError()
 
     def get_credits(self, project_id, expiry_date):
-        """Get project credits
+        """Get project credits (if supported by the driver)
 
         :param project_id: Project ID
         :param expiry_date: Any credit which expires after this date can be
                             listed
         :returns list of credits current project can get
         """
-        raise NotImplementedError()
+        return []
 
     def create_credit(self, project, credit):
         """Create credit for a given project

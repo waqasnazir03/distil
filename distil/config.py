@@ -1,16 +1,17 @@
-# Copyright (C) 2014 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from keystoneauth1 import loading as ka_loading
 from oslo_cache import core as cache
@@ -39,6 +40,14 @@ DEFAULT_OPTIONS = (
                default='odoo',
                help='The ERP driver used for Distil',
                ),
+    cfg.StrOpt('exporter_host',
+               default='0.0.0.0',
+               help='The listen IP for the Distil Prometheus exporter',
+               ),
+    cfg.IntOpt('exporter_port',
+               default=16798,
+               help='The bind port for the Distil Prometheus exporter',
+               ),
 )
 
 COLLECTOR_OPTS = [
@@ -50,6 +59,15 @@ COLLECTOR_OPTS = [
                help=('Data collector.')),
     cfg.IntOpt('max_windows_per_cycle', default=1,
                help=('The maximum number of windows per collecting cycle.')),
+    cfg.IntOpt('max_collection_start_age',
+               default=864,
+               help=('The maximum time period for determining the start time '
+                     'for usage collection on a new project, in hours. '
+                     'Default is 864 hours (36 days). '
+                     'Collection will start from the newest of: the project '
+                     'creation timestamp (if available), the oldest '
+                     "collected project's last collected time, or this value "
+                     '(the fallback).')),
     cfg.StrOpt('meter_mappings_file', default='/etc/distil/meter_mappings.yml',
                help=('The meter mappings configuration.')),
     cfg.StrOpt('transformer_file', default='/etc/distil/transformer.yml',
@@ -63,18 +81,32 @@ COLLECTOR_OPTS = [
     cfg.ListOpt('trust_sources', default=[],
                 help=('The list of resources that handled by collector.')),
     cfg.StrOpt('dawn_of_time', default='2014-04-01 00:00:00',
-               help=('The earlist starting time for new tenant.')),
+               deprecated_for_removal=True,
+               deprecated_since='2024.1',
+               deprecated_reason="Replaced by 'max_collection_start_age'.",
+               help=('Unused.')),
     cfg.StrOpt('partitioning_suffix',
                help=('Collector partitioning group suffix. It is used when '
                      'running multiple collectors in favor of lock.')),
     cfg.StrOpt('project_order', default='ascending',
                choices=['ascending', 'descending', 'random'],
                help=('The order of project IDs to do usage collection. '
-                     'Default is ascending.'))
+                     'Default is ascending.')),
+    cfg.BoolOpt('enable_exporter', default=False,
+                help=('Flag for enabling the Distil Collector '
+                      'Prometheus exporter.')),
+    cfg.StrOpt('exporter_host', default='0.0.0.0',
+               help=('The listen IP for the Distil Collector '
+                     'Prometheus exporter.')),
+    cfg.IntOpt('exporter_port', default=16799,
+               help=('The bind port for the Distil Collector '
+                     'Prometheus exporter.')),
 ]
 
 ODOO_OPTS = [
-    cfg.StrOpt('version', default='8.0',
+    cfg.StrOpt('version',
+               default=None,
+               required=False,
                help='Version of Odoo server.'),
     cfg.StrOpt('hostname',
                help='Host name of Odoo server.'),
@@ -100,21 +132,34 @@ ODOO_OPTS = [
                 help=("The product list which will be invisible to project "
                       "users. For example, as a cloud provider we would like "
                       "to hide the reseller margin for reseller's customer.")),
-    cfg.FloatOpt('tax_rate', default='0.15',
-                 help='Tax rate for invoicing.'),
     cfg.ListOpt('licensed_os_distro_list',
-                default=['windows',
-                         'sql-server-standard-windows',
-                         'sql-server-enterprise-windows'],
-                help='The os_distro list supported for microsoft product '
-                     'family. e.g. in Odoo, the product name could be '
-                     'c1.c1r2-windows or c1.c2r4-sql-server-standard-windows')
+                default=[],
+                help='A list of os_distro values for compute instances '
+                     'to treat as "licensed" for billing purposes. '
+                     'Instances running these distros will be charged an '
+                     'additional licensing fee. In Odoo, the products should '
+                     'be named "<flavor>-<os_distro>", e.g. c1.c1r2-windows '
+                     'or c1.c2r4-sql-server-standard-windows.'),
+    cfg.ListOpt('ignore_products_in_quotations',
+                default=[],
+                help='A list of products (services) to remove from '
+                     'quotations. This is useful for hiding products for '
+                     'services that are being collected by Distil, but are '
+                     'not actually charged yet.'),
 ]
 
 JSONFILE_OPTS = [
     cfg.StrOpt('products_file_path',
                default='/etc/distil/products.json',
                help='Json file to contain the products and prices.'),
+    cfg.FloatOpt('tax_rate', default=0,
+                 help='Tax rate for invoicing.'),
+    cfg.ListOpt('ignore_products_in_quotations',
+                default=[],
+                help='A list of products (services) to remove from '
+                     'quotations. This is useful for hiding products for '
+                     'services that are being collected by Distil, but are '
+                     'not actually charged yet.'),
 ]
 
 

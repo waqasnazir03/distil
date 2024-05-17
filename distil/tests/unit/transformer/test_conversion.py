@@ -1,16 +1,18 @@
-# Copyright (C) 2017 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import datetime
 
 import mock
@@ -48,12 +50,9 @@ FAKE_CONFIG = {
         "none_values": ["None", ""],
         "size_keys": ["root_gb"]
     },
-    "databaseuptime": {
-        "tracked_states": ["ACTIVE", "BUILD"]
-    },
     "databasemanagementuptime": {
-        "tracked_states": ["ACTIVE", "BUILD"],
-        "service_name": "d1.managment"
+        "prefix": "db.",
+        "tracked_states": ["ACTIVE", "UPGRADE"],
     }
 }
 
@@ -138,7 +137,7 @@ class TestUpTimeTransformer(base.DistilTestCase):
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
 
-        self.assertEqual({FAKE_DATA.flavor: 1800}, result)
+        self.assertEqual({FAKE_DATA.flavor: 3600}, result)
 
     def test_online_flavor_change(self):
         """
@@ -165,50 +164,6 @@ class TestUpTimeTransformer(base.DistilTestCase):
             {FAKE_DATA.flavor: 1800, FAKE_DATA.flavor2: 1800},
             result
         )
-
-    def test_period_leadin_none_available(self):
-        """
-        Test that if the first data point is well into the window, and we had
-        no lead-in data, we assume no usage until our first real data point.
-        """
-        state = [
-            {'timestamp': FAKE_DATA.t0_10.isoformat(),
-             'metadata': {'instance_type': FAKE_DATA.flavor,
-                          'status': 'active'}},
-            {'timestamp': FAKE_DATA.t1.isoformat(),
-             'metadata': {'instance_type': FAKE_DATA.flavor,
-                          'status': 'active'}}
-        ]
-
-        xform = get_transformer('uptime')
-        result = xform.transform_usage('state', state, FAKE_DATA.t0,
-                                       FAKE_DATA.t1)
-
-        self.assertEqual({FAKE_DATA.flavor: 3000}, result)
-
-    def test_period_leadin_available(self):
-        """
-        Test that if the first data point is well into the window, but we *do*
-        have lead-in data, then we use the lead-in clipped to the start of the
-        window.
-        """
-        state = [
-            {'timestamp': FAKE_DATA.tpre.isoformat(),
-             'metadata': {'instance_type': FAKE_DATA.flavor,
-                          'status': 'active'}},
-            {'timestamp': FAKE_DATA.t0_10.isoformat(),
-             'metadata': {'instance_type': FAKE_DATA.flavor,
-                          'status': 'active'}},
-            {'timestamp': FAKE_DATA.t1.isoformat(),
-             'metadata': {'instance_type': FAKE_DATA.flavor,
-                          'status': 'active'}}
-        ]
-
-        xform = get_transformer('uptime')
-        result = xform.transform_usage('state', state, FAKE_DATA.t0,
-                                       FAKE_DATA.t1)
-
-        self.assertEqual({FAKE_DATA.flavor: 3600}, result)
 
     def test_notification_case(self):
         """
@@ -248,18 +203,16 @@ class TestUpTimeTransformer(base.DistilTestCase):
 
         self.assertEqual({}, result)
 
-    def test_wash_data(self):
+    def test_run_less_than_interval(self):
+        """
+        Test that an instance that has been running for less than the interval
+        has full usage reported by the transformer.
+        """
         entries = [
-            {'timestamp': FAKE_DATA.tpre.isoformat(),
-             'metadata': {'instance_type': FAKE_DATA.flavor,
-                          'status': 'active'}},
             {'timestamp': FAKE_DATA.t0_10.isoformat(),
              'metadata': {'instance_type': FAKE_DATA.flavor,
                           'status': 'active'}},
             {'timestamp': FAKE_DATA.t0_30.isoformat(),
-             'metadata': {'instance_type': FAKE_DATA.flavor,
-                          'status': 'shelving'}},
-            {'timestamp': FAKE_DATA.t1.isoformat(),
              'metadata': {'instance_type': FAKE_DATA.flavor,
                           'status': 'active'}}
         ]
@@ -272,8 +225,7 @@ class TestUpTimeTransformer(base.DistilTestCase):
             FAKE_DATA.t1
         )
 
-        self.assertEqual({FAKE_DATA.flavor: 1800}, result)
-        self.assertEqual(3, len(entries))
+        self.assertEqual({FAKE_DATA.flavor: 3600}, result)
 
 
 @mock.patch.object(general, 'get_transformer_config',
@@ -412,45 +364,10 @@ class TestNetworkServiceTransformer(base.DistilTestCase):
 
         self.assertEqual({'fake_meter': 0}, usage)
 
-@mock.patch.object(general, 'get_transformer_config',
-                   mock.Mock(return_value=FAKE_CONFIG))
-class TestMagnumTransformer(base.DistilTestCase):
-    def test_basic_sum(self):
-        """Tests that the transformer correctly calculate the sum value.
-        """
-
-        data = [
-            {'timestamp': '2014-01-01T00:00:00', 'volume': 1},
-            {'timestamp': '2014-01-01T00:10:00', 'volume': 0},
-            {'timestamp': '2014-01-01T01:00:00', 'volume': 2},
-        ]
-
-        xform = get_transformer('magnum')
-        usage = xform.transform_usage('fake_meter', data, FAKE_DATA.t0,
-                                      FAKE_DATA.t1)
-
-        self.assertEqual({'fake_meter': 1}, usage)
-
-    def test_only_non_charged(self):
-        """Tests that the transformer correctly calculate the sum value.
-        """
-
-        data = [
-            {'timestamp': '2014-01-01T00:00:00', 'volume': 1},
-            {'timestamp': '2014-01-01T00:10:00', 'volume': 1},
-            {'timestamp': '2014-01-01T01:00:00', 'volume': 18},
-        ]
-
-        xform = get_transformer('magnum')
-        usage = xform.transform_usage('fake_meter', data, FAKE_DATA.t0,
-                                      FAKE_DATA.t1)
-
-        self.assertEqual({'fake_meter': 0}, usage)
-
 
 @mock.patch.object(general, 'get_transformer_config',
                    fake_get_transformer_config)
-class TestDatabaseUpTimeTransformer(base.DistilTestCase):
+class TestDatabaseManagementUpTimeTransformer(base.DistilTestCase):
 
     @mock.patch.object(
         openstack, 'get_flavor_name',
@@ -469,31 +386,34 @@ class TestDatabaseUpTimeTransformer(base.DistilTestCase):
                           'status': 'ACTIVE'}}
         ]
 
-        xform = get_transformer('databaseuptime')
+        xform = get_transformer('databasemanagementuptime')
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
 
-        self.assertEqual({FAKE_DATA.flavor: 3600}, result)
+        management_service = (
+            FAKE_CONFIG['databasemanagementuptime']['prefix'] + FAKE_DATA.flavor
+        )
+
+        self.assertEqual({management_service: 3600}, result)
 
     @mock.patch.object(
         openstack, 'get_flavor_name',
         mock.Mock(return_value=FAKE_DATA.flavor))
     def test_offline_constant_flavor(self):
         """
-        Test that a machine offline for a 1h period with constant flavor
-        works and gives zero uptime.
+        Test that a machine in SHUTDOWN state for a 1h period gives 0h uptime,
+        due to the SHUTDOWN state not being in the list of tracked states.
         """
-
         state = [
             {'timestamp': FAKE_DATA.t0.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}},
+                          'status': 'SHUTDOWN'}},
             {'timestamp': FAKE_DATA.t1.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}}
+                          'status': 'SHUTDOWN'}},
         ]
 
-        xform = get_transformer('databaseuptime')
+        xform = get_transformer('databasemanagementuptime')
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
 
@@ -504,7 +424,7 @@ class TestDatabaseUpTimeTransformer(base.DistilTestCase):
         mock.Mock(return_value=FAKE_DATA.flavor))
     def test_shutdown_during_period(self):
         """
-        Test that a machine run for 0.5 then shutdown gives 0.5h uptime.
+        Test that a machine run for 0.5 then shutdown gives 1h uptime.
         """
         state = [
             {'timestamp': FAKE_DATA.t0.isoformat(),
@@ -512,26 +432,33 @@ class TestDatabaseUpTimeTransformer(base.DistilTestCase):
                           'status': 'ACTIVE'}},
             {'timestamp': FAKE_DATA.t0_30.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}},
+                          'status': 'SHUTDOWN'}},
             {'timestamp': FAKE_DATA.t1.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}}
+                          'status': 'SHUTDOWN'}}
         ]
 
-        xform = get_transformer('databaseuptime')
+        xform = get_transformer('databasemanagementuptime')
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
 
-        self.assertEqual({FAKE_DATA.flavor: 1800}, result)
+        management_service = (
+            FAKE_CONFIG['databasemanagementuptime']['prefix'] + FAKE_DATA.flavor
+        )
+
+        self.assertEqual({management_service: 3600}, result)
 
     def test_online_flavor_change(self):
         """
-        Test that a machine run for 0.5h as m1.tiny, resized to m1.large,
-        and run for a further 0.5 yields 0.5h of uptime in each class.
+        Test that a machine run for 10 minutes as one flavour, resized to another,
+        and run for a further 50 minutes yields 0.5h of uptime in each class.
         """
         state = [
             {'timestamp': FAKE_DATA.t0.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor,
+                          'status': 'ACTIVE'}},
+            {'timestamp': FAKE_DATA.t0_10.isoformat(),
+             'metadata': {'flavor.id': FAKE_DATA.flavor2,
                           'status': 'ACTIVE'}},
             {'timestamp': FAKE_DATA.t0_30.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor2,
@@ -541,7 +468,7 @@ class TestDatabaseUpTimeTransformer(base.DistilTestCase):
                           'status': 'ACTIVE'}}
         ]
 
-        xform = get_transformer('databaseuptime')
+        xform = get_transformer('databasemanagementuptime')
 
         def fake_get_flavor(name):
             return name
@@ -551,8 +478,15 @@ class TestDatabaseUpTimeTransformer(base.DistilTestCase):
             result = xform.transform_usage(
                 'state', state, FAKE_DATA.t0, FAKE_DATA.t1)
 
+        management_service1 = (
+            FAKE_CONFIG['databasemanagementuptime']['prefix'] + FAKE_DATA.flavor
+        )
+        management_service2 = (
+            FAKE_CONFIG['databasemanagementuptime']['prefix'] + FAKE_DATA.flavor2
+        )
+
         self.assertDictEqual(
-            {FAKE_DATA.flavor: 1800, FAKE_DATA.flavor2: 1800},
+            {management_service1: 1800, management_service2: 1800},
             result
         )
 
@@ -571,58 +505,6 @@ class TestDatabaseUpTimeTransformer(base.DistilTestCase):
              'metadata': {'flavor.id': FAKE_DATA.flavor}}
         ]
 
-        xform = get_transformer('databaseuptime')
-        result = xform.transform_usage('state', state, FAKE_DATA.t0,
-                                       FAKE_DATA.t1)
-
-        self.assertEqual({}, result)
-
-
-@mock.patch.object(general, 'get_transformer_config',
-                   fake_get_transformer_config)
-class TestDatabaseManagementUpTimeTransformer(base.DistilTestCase):
-
-    @mock.patch.object(
-        openstack, 'get_flavor_name',
-        mock.Mock(return_value=FAKE_DATA.flavor))
-    def test_online_constant_flavor(self):
-        """
-        Test that a machine online for a 1h period with constant
-        flavor works and gives 1h of uptime.
-        """
-        state = [
-            {'timestamp': FAKE_DATA.t0.isoformat(),
-             'metadata': {'status': 'ACTIVE'}},
-            {'timestamp': FAKE_DATA.t1.isoformat(),
-             'metadata': {'status': 'ACTIVE'}}
-        ]
-
-        xform = get_transformer('databasemanagementuptime')
-        result = xform.transform_usage('state', state, FAKE_DATA.t0,
-                                       FAKE_DATA.t1)
-
-        management_service = "db." + FAKE_DATA.flavor
-
-        self.assertEqual({management_service: 3600}, result)
-
-    @mock.patch.object(
-        openstack, 'get_flavor_name',
-        mock.Mock(return_value=FAKE_DATA.flavor))
-    def test_offline_constant_flavor(self):
-        """
-        Test that a machine offline for a 1h period with constant flavor
-        works and gives zero uptime.
-        """
-
-        state = [
-            {'timestamp': FAKE_DATA.t0.isoformat(),
-             'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}},
-            {'timestamp': FAKE_DATA.t1.isoformat(),
-             'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}}
-        ]
-
         xform = get_transformer('databasemanagementuptime')
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
@@ -632,26 +514,26 @@ class TestDatabaseManagementUpTimeTransformer(base.DistilTestCase):
     @mock.patch.object(
         openstack, 'get_flavor_name',
         mock.Mock(return_value=FAKE_DATA.flavor))
-    def test_shutdown_during_period(self):
+    def test_run_less_than_interval(self):
         """
-        Test that a machine run for 0.5 then shutdown gives 0.5h uptime.
+        Test that an instance that has been running for less than the interval
+        has full usage reported by the transformer.
         """
         state = [
-            {'timestamp': FAKE_DATA.t0.isoformat(),
+            {'timestamp': FAKE_DATA.t0_10.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor,
                           'status': 'ACTIVE'}},
             {'timestamp': FAKE_DATA.t0_30.isoformat(),
              'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}},
-            {'timestamp': FAKE_DATA.t1.isoformat(),
-             'metadata': {'flavor.id': FAKE_DATA.flavor,
-                          'status': 'stopped'}}
+                          'status': 'ACTIVE'}},
         ]
 
         xform = get_transformer('databasemanagementuptime')
         result = xform.transform_usage('state', state, FAKE_DATA.t0,
                                        FAKE_DATA.t1)
 
-        management_service = "db." + FAKE_DATA.flavor
+        management_service = (
+            FAKE_CONFIG['databasemanagementuptime']['prefix'] + FAKE_DATA.flavor
+        )
 
-        self.assertEqual({management_service: 1800}, result)
+        self.assertEqual({management_service: 3600}, result)

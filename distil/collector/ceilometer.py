@@ -1,16 +1,17 @@
-# Copyright 2016 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -25,10 +26,14 @@ CONF = cfg.CONF
 
 
 class CeilometerCollector(base.BaseCollector):
-    def __init__(self, *arg, **kwargs):
-        super(CeilometerCollector, self).__init__(*arg, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(CeilometerCollector, self).__init__(*args, **kwargs)
+        self._cclient = None
 
-        self.cclient = openstack.get_ceilometer_client()
+    def _get_ceilometer_client(self):
+        if not self._cclient:
+            self._cclient = openstack.get_ceilometer_client()
+        return self._cclient
 
     @general.disable_ssl_warnings
     def get_meter(self, project_id, meter, start, end):
@@ -64,10 +69,14 @@ class CeilometerCollector(base.BaseCollector):
                  value=end.strftime(constants.date_format)),
         ]
 
-        sample_objs = self.cclient.new_samples.list(q=query)
+        sample_objs = self._get_ceilometer_client().new_samples.list(q=query)
 
-        # The samples are in descending order by default, should change it to
-        # be ascending, making the logic consistent with deprecated code.
-        sample_objs.reverse()
-
-        return [obj.to_dict() for obj in sample_objs]
+        return [
+            obj.to_dict()
+            # Sort the samples, by timestamp, in ascending order.
+            # The response from Ceilometer API is in descending order,
+            # but there have been cases where the response from the API
+            # is not actually sorted, so explicitly sort the structure
+            # to reverse the order here.
+            for obj in sorted(sample_objs, key=lambda s: s.timestamp)
+        ]

@@ -1,21 +1,26 @@
-# Copyright 2016 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import abc
-from datetime import timedelta
 import hashlib
 import re
+
+from datetime import timedelta
+
+import jmespath
+import six
 import yaml
 
 from oslo_config import cfg
@@ -32,14 +37,17 @@ CONF = cfg.CONF
 
 
 class BaseCollector(object):
-    def __init__(self):
+    def __init__(self, metrics_processors=[]):
+        # Meter-to-service mapping, stored as a YAML file.
         meter_file = CONF.collector.meter_mappings_file
-
         with open(meter_file, 'r') as f:
             try:
                 self.meter_mappings = yaml.safe_load(f)
             except yaml.YAMLError:
                 raise exc.InvalidConfig("Invalid yaml file: %s" % meter_file)
+        # Metrics processors, managed by the collector service.
+        # Used to publish project-specific metrics.
+        self.metrics_processors = metrics_processors
 
     @abc.abstractmethod
     def get_meter(self, project, meter, start, end):
@@ -60,16 +68,11 @@ class BaseCollector(object):
             resources = {}
             usage_entries = []
 
-            # NOTE(kong): Set 10min as leadin time when getting samples, this
-            # helps us to get correct instance uptime, in case the instance
-            # status in first sample is not in our tracked status list.
-            actual_start = window_start - timedelta(minutes=10)
-
             try:
                 for mapping in self.meter_mappings:
                     # Invoke get_meter function of specific collector.
                     usage = self.get_meter(project['id'], mapping['meter'],
-                                           actual_start, window_end)
+                                           window_start, window_end)
 
                     usage_by_resource = {}
                     self._filter_and_group(usage, usage_by_resource)
@@ -210,13 +213,77 @@ class BaseCollector(object):
             override_config=mapping.get('transformer_config', {}))
 
         for res_id, entries in usage_by_resource.items():
+            res_id = mapping.get('res_id_template', '%s') % res_id
+
+            # NOTE(callumdickinson): If one or more meter mapping filters are
+            # defined, use them to drop samples that should not be considered
+            # when creating usage entries.
+            if "filters" in mapping and mapping["filters"]:
+                entries = (
+                    sample
+                    for sample in entries
+                    if self._sample_filter(mapping["filters"], sample)
+                )
+
+            # NOTE(callumdickinson): Handle any volume handling options.
+            if "volume" in mapping and mapping["volume"]:
+                volume_config = mapping["volume"]
+                if isinstance(volume_config, dict):
+                    # NOTE(callumdickinson): If the meter mapping specifies
+                    # a custom volume source, overwrite the volume in the
+                    # samples with the values located using the defined
+                    # search expression (or list of expressions).
+                    # If a list of expressions, use the first match.
+                    for key in ("sources", "source"):
+                        if key in volume_config and volume_config[key]:
+                            volume_sources = volume_config[key]
+                            entries = (
+                                dict(
+                                    sample,
+                                    volume=self._sample_search(
+                                        field="volume",
+                                        expression=volume_sources,
+                                        sample=sample,
+                                        value_type=float,
+                                    ),
+                                )
+                                for sample in entries
+                            )
+                # NOTE(callumdickinson): If volume is defined and is a
+                # non-None value, but does not fall into any other category,
+                # assume it is an override to set the volume to a fixed value
+                # and set that on all samples.
+                else:
+                    entries = (
+                        dict(sample, volume=float(volume_config))
+                        for sample in entries
+                    )
+
+            # NOTE(callumdickinson): Render any sample filters applied above.
+            entries = list(entries)
+            LOG.debug(
+                (
+                    "Post-preprocessing, pre-transformation usage "
+                    "for resource %s: %s"
+                ),
+                res_id,
+                entries,
+            )
+            if not entries:
+                LOG.debug(
+                    (
+                        "Pre-processing filtered out all usage for "
+                        "resource %s, skipping"
+                    ),
+                    res_id,
+                )
+                continue
+
             transformed = transformer.transform_usage(
                 service, entries, window_start, window_end
             )
 
             if transformed:
-                res_id = mapping.get('res_id_template', '%s') % res_id
-
                 # NOTE(flwang): Currently the column size of resource id in DB
                 # is 100 chars, but the container name of swift could be 256,
                 # plus project id and a '/', the id for a swift container
@@ -255,3 +322,103 @@ class BaseCollector(object):
                         'tenant_id': project_id
                     }
                     usage_entries.append(entry)
+                    # Push the usage entry to all active metrics processors.
+                    for metrics_processor in self.metrics_processors:
+                        metrics_processor.usage(
+                            project_id=entry["tenant_id"],
+                            service=entry["service"],
+                            unit=entry["unit"],
+                            resource_id=entry["resource_id"],
+                            start=entry["start"],
+                            end=entry["end"],
+                            volume=entry["volume"],
+                        )
+
+    @classmethod
+    def _sample_search(
+        cls,
+        field,
+        expression,
+        sample,
+        optional=False,
+        default=0,
+        value_type=None,
+    ):
+        if isinstance(expression, six.string_types):
+            expressions = [expression]
+            expressions_str = "search expression '{}'".format(expression)
+        else:  # list
+            expressions = expression
+            expressions_str = "search expressions {}".format(expression)
+        for search_expr in expressions:
+            value = jmespath.search(search_expr, sample)
+            if value is not None:
+                if value_type:
+                    try:
+                        return value_type(value)
+                    except ValueError as err:
+                        raise exc.SearchExpressionValueTypeError(
+                            (
+                                "Unable to convert value found for "
+                                "field '{}' using {} in sample to type '{}': "
+                                "{} (search expression: {}, value: {}, "
+                                "sample: {})"
+                            ).format(
+                                field,
+                                expressions_str,
+                                value_type.__name__,
+                                err,
+                                repr(search_expr),
+                                repr(value),
+                                repr(sample),
+                            ),
+                        )
+                return value
+        if optional:
+            LOG.warning(
+                (
+                    "Value not found for field '{}' using {} in sample: {}"
+                    " -> using the default value of {}"
+                ).format(
+                    field,
+                    expressions_str,
+                    sample,
+                    default,
+                ),
+            )
+            return default
+        raise exc.SearchExpressionNotFoundError(
+            "Value not found for field '{}' using {} in sample: {}".format(
+                field,
+                expressions_str,
+                sample,
+            ),
+        )
+
+    @classmethod
+    def _sample_filter(cls, filters, sample):
+        # NOTE(callumdickinson): Only allow the sample if *ALL* filters
+        # return a positive result.
+        for filter in filters:
+            result = jmespath.search(filter, sample)
+            if not result:
+                LOG.debug(
+                    (
+                        "Dropping sample due to meter mapping filter result: "
+                        "sample=%s, filters=%s, filter=%s, result=%s"
+                    ),
+                    sample,
+                    filters,
+                    filter,
+                    result,
+                )
+                return False
+        LOG.debug(
+            (
+                "Sample passed through meter mapping filters: "
+                "sample=%s, filters=%s"
+            ),
+            sample,
+            filters,
+        )
+        return True

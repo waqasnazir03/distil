@@ -1,4 +1,4 @@
-# Copyright 2014 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ from distil.db.sqlalchemy.models import ProjectLock
 from distil.db.sqlalchemy.models import Resource
 from distil.db.sqlalchemy.models import Tenant
 from distil.db.sqlalchemy.models import UsageEntry
+from distil.helpers import get_max_last_collected
 from distil import exceptions
 
 LOG = logging.getLogger(__name__)
@@ -162,15 +163,35 @@ def project_add(values, last_collect=None):
     project = _project_get(session, values['id'])
 
     if not project:
-        if not last_collect:
-            last_collect = datetime.strptime(
-                CONF.collector.dawn_of_time,
-                "%Y-%m-%d %H:%M:%S"
+        # TODO(callumdickinson): Move this somewhere more generic.
+        # NOTE(callumdickinson): Determine the appropriate value
+        # to use for `last_collected`.
+        # The latest (newest) of the following are used:
+        #   * The maximum acceptable `last_collected` value, calculated by
+        #     subtracting `max_collection_start_age` from the current time
+        #   * The oldest `last_collected` value from the projects to collect
+        #     (passed in as `last_collect`)
+        #   * The project creation time, if the field is recorded in Keytstone
+        #     (as the `created_on` field, added by Adjutant on creation)
+        last_collected_candidates = [
+            get_max_last_collected(
+                CONF.collector.max_collection_start_age,
+            ),
+        ]
+        if last_collect:
+            last_collected_candidates.append(last_collect)
+        if "created_on" in values:
+            last_collected_candidates.append(
+                datetime.strptime(
+                    values["created_on"],
+                    "%Y-%m-%dT%H:%M:%S",
+                ).replace(minute=0, second=0),
             )
+        last_collected = max(last_collected_candidates)
 
         project = Tenant(id=values['id'], name=values['name'],
                          info=values['description'], created=datetime.utcnow(),
-                         last_collected=last_collect)
+                         last_collected=last_collected)
 
         try:
             project.save(session=session)
@@ -210,6 +231,14 @@ def get_last_collect(project_ids):
     query = query.filter(Tenant.id.in_(project_ids))
 
     return query.one()
+
+
+def get_last_collected_all(**filters):
+    session = get_session()
+    query = session.query(Tenant.id, Tenant.last_collected)
+    query = apply_filters(query, Tenant, **filters)
+
+    return query.all()
 
 
 def usage_get(project_id, start, end):
@@ -379,8 +408,13 @@ def create_project_lock(project_id, owner):
     session.flush()
 
     insert = ProjectLock.__table__.insert()
-    session.execute(insert.values(project_id=project_id, owner=owner,
-                                  created=datetime.utcnow()))
+    try:
+        session.execute(insert.values(project_id=project_id, owner=owner,
+                                      created=datetime.utcnow()))
+    except db_exception.DBDuplicateEntry:
+        raise exceptions.DuplicateException(
+            "Duplicate lock for project: %s" % project_id
+        )
 
     session.flush()
 

@@ -1,4 +1,5 @@
 # Copyright (c) 2013 Mirantis Inc.
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,9 +77,10 @@ class Rest(flask.Blueprint):
                 try:
                     return func(**kwargs)
                 except ex.DistilException as e:
-                    LOG.error('Error during API call: %s' % str(e))
+                    LOG.error('Error during API call: %s', e)
                     return render_error_message(e.code, str(e))
                 except Exception as e:
+                    LOG.exception('Unexpected exception during API call')
                     return render_error_message(500, str(e))
 
             f_rule = rule

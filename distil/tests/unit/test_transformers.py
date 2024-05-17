@@ -1,16 +1,17 @@
-# Copyright (C) 2014 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import distil.transformers
 from distil.constants import date_format, states
@@ -126,43 +127,6 @@ class TestUptimeTransformer(unittest.TestCase):
         self.assertEqual({FAKE_DATA.flavor: 1800, FAKE_DATA.flavor2: 1800},
                          result)
 
-    def test_period_leadin_none_available(self):
-        """
-        Test that if the first data point is well into the window, and we had
-        no lead-in data, we assume no usage until our first real data point.
-        """
-        state = [
-            {'timestamp': FAKE_DATA.t0_10, 'counter_volume': states['active'],
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor}},
-            {'timestamp': FAKE_DATA.t1, 'counter_volume': states['active'],
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor}}
-        ]
-
-        result = self._run_transform(state)
-        # there should be 50 minutes of usage; we have no idea what happened
-        # before that so we don't try to bill it.
-        self.assertEqual({FAKE_DATA.flavor: 3000}, result)
-
-    def test_period_leadin_available(self):
-        """
-        Test that if the first data point is well into the window, but we *do*
-        have lead-in data, then we use the lead-in clipped to the start of the
-        window.
-        """
-        state = [
-            {'timestamp': FAKE_DATA.tpre, 'counter_volume': states['active'],
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor}},
-            {'timestamp': FAKE_DATA.t0_10, 'counter_volume': states['active'],
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor}},
-            {'timestamp': FAKE_DATA.t1, 'counter_volume': states['active'],
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor}}
-        ]
-
-        result = self._run_transform(state)
-        # there should be 60 minutes of usage; we have no idea what
-        # happened before that so we don't try to bill it.
-        self.assertEqual({FAKE_DATA.flavor: 3600}, result)
-
 
 class InstanceUptimeTransformerTests(unittest.TestCase):
 
@@ -260,48 +224,6 @@ class InstanceUptimeTransformerTests(unittest.TestCase):
         # there should be half an hour of usage in each of m1.tiny and m1.large
         self.assertEqual({FAKE_DATA.flavor: 1800, FAKE_DATA.flavor2: 1800},
                          result)
-
-    def test_period_leadin_none_available(self):
-        """
-        Test that if the first data point is well into the window, and we had
-        no lead-in data, we assume no usage until our first real data point.
-        """
-        state = [
-            {'timestamp': FAKE_DATA.t0_10,
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor,
-                                      'status': 'active'}},
-            {'timestamp': FAKE_DATA.t1,
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor,
-                                      'status': 'active'}}
-        ]
-
-        result = self._run_transform(state)
-        # there should be 50 minutes of usage; we have no idea what happened
-        # before that so we don't try to bill it.
-        self.assertEqual({FAKE_DATA.flavor: 3000}, result)
-
-    def test_period_leadin_available(self):
-        """
-        Test that if the first data point is well into the window, but we *do*
-        have lead-in data, then we use the lead-in clipped to the start of the
-        window.
-        """
-        state = [
-            {'timestamp': FAKE_DATA.tpre,
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor,
-                                      'status': 'active'}},
-            {'timestamp': FAKE_DATA.t0_10,
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor,
-                                      'status': 'active'}},
-            {'timestamp': FAKE_DATA.t1,
-                'resource_metadata': {'flavor.id': FAKE_DATA.flavor,
-                                      'status': 'active'}}
-        ]
-
-        result = self._run_transform(state)
-        # there should be 60 minutes of usage; we have no idea what
-        # happened before that so we don't try to bill it.
-        self.assertEqual({FAKE_DATA.flavor: 3600}, result)
 
     def test_notification_case(self):
         """

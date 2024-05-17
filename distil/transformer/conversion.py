@@ -1,18 +1,20 @@
-# Copyright 2016 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-import copy
+from __future__ import division
+
 from datetime import datetime
 
 from distil.transformer import BaseTransformer
@@ -22,91 +24,60 @@ from distil.common import openstack
 
 class UpTimeTransformer(BaseTransformer):
     """
-    Transformer to calculate uptime based on states,
-    which is broken apart into flavor at point in time.
+    Transformer for discovering all flavours a compute instance
+    was running as within the window.
+
+    Previous versions of this transformer attempted to extrapolate
+    the instance uptime from the telemetry samples,
+    based on their collection timestamp.
+
+    This was not accurate, as that merely corresponds to when the
+    telemetry agent polled for the instance, not actual uptime.
+    This never returned a "full" uptime value for a window, either,
+    without hacking the start/end time to have the transformer look at
+    the previous hour, as well.
     """
 
-    def _wash_data(self, entries, tracked):
-        """Get rid of invalid entries."""
-
-        copy_entries = copy.deepcopy(entries)
-
-        for entry in copy_entries:
-            status = entry['metadata'].get(
-                'status', entry['metadata'].get('state', "")
+    @property
+    def tracked_states(self):
+        if not hasattr(self, "_tracked_states"):
+            self._tracked_states = set(
+                (state.upper() for state in self.config["tracked_states"]),
             )
-            if status not in tracked:
-                entries.remove(entry)
+        return self._tracked_states
+
+    @property
+    def service_prefix(self):
+        return self.config.get("prefix") or ""
+
+    def get_state(self, sample):
+        return sample["metadata"].get(
+            "status",
+            sample["metadata"].get("state", ""),
+        ).upper()
+
+    def get_flavor(self, sample):
+        return sample["metadata"].get("instance_type")
 
     def _transform_usage(self, name, data, start, end):
-        # get tracked states from config
-        tracked = self.config['tracked_states']
-
-        usage_dict = {}
-
-        def sort_and_clip_end(usage):
-            cleaned = (self._clean_entry(s) for s in usage)
-            clipped = [s for s in cleaned if s['timestamp'] < end]
-            return clipped
-
-        state = sort_and_clip_end(data)
-
-        self._wash_data(data, tracked)
-
-        if not len(state) or not len(data):
-            # there was no valid data for this period.
-            return usage_dict
-
-        last_state = state[0]
-        if last_state['timestamp'] >= start:
-            last_timestamp = last_state['timestamp']
-            seen_sample_in_window = True
-        else:
-            last_timestamp = start
-            seen_sample_in_window = False
-
-        def _add_usage(diff):
-            flav = last_state['flavor']
-            usage_dict[flav] = usage_dict.get(flav, 0) + diff.total_seconds()
-
-        for val in state[1:]:
-            if last_state["status"] in tracked:
-                if val['timestamp'] > last_timestamp:
-                    # if diff < 0 then we were looking back before the start
-                    # of the window.
-                    diff = val["timestamp"] - last_timestamp
-                    _add_usage(diff)
-
-                    last_timestamp = val['timestamp']
-                    seen_sample_in_window = True
-
-            last_state = val
-
-        # extend the last state we know about, to the end of the window,
-        # if we saw any actual uptime.
-        if (end and last_state['status'] in tracked and seen_sample_in_window):
-            diff = end - last_timestamp
-            _add_usage(diff)
-
-        return usage_dict
-
-    def _clean_entry(self, entry):
-        try:
-            timestamp = datetime.strptime(
-                entry['timestamp'], constants.date_format)
-        except ValueError:
-            timestamp = datetime.strptime(
-                entry['timestamp'], constants.date_format_f)
-
-        result = {
-            'status': entry['metadata'].get(
-                'status', entry['metadata'].get('state', "")
-            ),
-            'flavor': entry['metadata'].get('instance_type'),
-            'timestamp': timestamp
+        # Discover what flavors the instance was running as within the window.
+        sampled_flavors = set()
+        for sample in data:
+            if self.get_state(sample) not in self.tracked_states:
+                continue
+            flavor = self.get_flavor(sample)
+            if flavor:
+                sampled_flavors.add(flavor)
+        # Divide the total time within the window equally between the sampled
+        # flavor types the instance was running as within the window,
+        # and return all of them.
+        if not sampled_flavors:
+            return {}
+        volume = (end - start).total_seconds() / len(sampled_flavors)
+        return {
+            "{}{}".format(self.service_prefix, flavor): volume
+            for flavor in sampled_flavors
         }
-
-        return result
 
 
 class FromImageTransformer(BaseTransformer):
@@ -140,7 +111,7 @@ class FromImageTransformer(BaseTransformer):
                 except KeyError:
                     pass
 
-        hours = (end - start).total_seconds() / 3600.0
+        hours = (end - start).total_seconds() // 3600.0
 
         return {service: size * hours}
 
@@ -159,94 +130,24 @@ class NetworkServiceTransformer(BaseTransformer):
         volumes = [v["volume"] for v in data if
                    v["volume"] < 2]
         max_vol = max(volumes) if len(volumes) else 0
-        hours = (end - start).total_seconds() / 3600.0
+        hours = (end - start).total_seconds() // 3600.0
         return {name: max_vol * hours}
-
-
-class MagnumTransformer(BaseTransformer):
-    """Transformer for Magnum clusters.
-    """
-
-    def _transform_usage(self, name, data, start, end):
-        # NOTE(flwang): The magnum pollster of Ceilometer is using
-        # status as the volume(see ceilometer/cim/magnum.py), so we have
-        # to check the volume to make sure only the active clusters are
-        # charged.
-        charged_cluster_status = [2, 3, 4, 5, 9, 10, 11,
-                                  12, 13, 14, 15, 16, 17]
-        volumes = [v["volume"] for v in data if
-                   v["volume"] in charged_cluster_status]
-
-        # If there is any valid status in this hour, then we think it's a valid
-        # sample.
-        max_vol = 1 if len(volumes) else 0
-        hours = (end - start).total_seconds() / 3600.0
-        return {name: max_vol * hours}
-
-
-class DatabaseUpTimeTransformer(UpTimeTransformer):
-    """
-    Transformer to calculate uptime based on states,
-    which is broken apart into flavor at point in time.
-
-    Same as the normal instance uptime transformer, but the
-    status and flavor are pulled from different locations
-    in the metadata as database instance samples have a
-    different format.
-    """
-
-    def _clean_entry(self, entry):
-        try:
-            timestamp = datetime.strptime(
-                entry['timestamp'], constants.date_format)
-        except ValueError:
-            timestamp = datetime.strptime(
-                entry['timestamp'], constants.date_format_f)
-
-        flavor = openstack.get_flavor_name(
-            entry['metadata'].get('flavor.id'))
-
-        result = {
-            'status': entry['metadata'].get('status'),
-            'flavor': flavor,
-            'timestamp': timestamp
-        }
-
-        return result
 
 
 class DatabaseManagementUpTimeTransformer(UpTimeTransformer):
     """
-    Transformer to calculate uptime based on states,
-    which is broken apart into flavor at point in time.
+    Transformer for discovering all flavour a database instance
+    was running as within the widndow.
 
-    While this uses the base uptime logic, the service name
-    here needs to be a variant of the flavor prefixed with
-    a database specific value. In this case 'db.' which will
-    mean a flavor of 'c1.c1r2' will become 'db.c1.c1r2' for the
-    service in the usage sample.
+    While this uses the base `uptime` transformer logic,
+    the service name here needs to be a variant of the flavor
+    prefixed with a database specific value, in this case `db.`,
+    which will mean a flavor of `c1.c1r2` will become `db.c1.c1r2`
+    for the service in the usage entry.
     """
 
-    def _clean_entry(self, entry):
-        management_prefix = self.config.get(
-            'prefix', 'db.')
+    def get_state(self, sample):
+        return sample["metadata"].get("status", "").upper()
 
-        try:
-            timestamp = datetime.strptime(
-                entry['timestamp'], constants.date_format)
-        except ValueError:
-            timestamp = datetime.strptime(
-                entry['timestamp'], constants.date_format_f)
-
-        flavor = openstack.get_flavor_name(
-            entry['metadata'].get('flavor.id'))
-
-        management_service_name = management_prefix + flavor
-
-        result = {
-            'status': entry['metadata'].get('status'),
-            'flavor': management_service_name,
-            'timestamp': timestamp
-        }
-
-        return result
+    def get_flavor(self, sample):
+        return openstack.get_flavor_name(sample["metadata"].get("flavor.id"))

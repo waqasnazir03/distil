@@ -1,16 +1,17 @@
-# Copyright (C) 2014 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from datetime import datetime
 from datetime import timedelta
@@ -113,6 +114,20 @@ def convert_to(value, from_unit, to_unit):
        """
     if from_unit == to_unit:
         return value
+    if from_unit not in conversions:
+        raise ValueError(
+            (
+                "Unsupported unit '{}' "
+                "(when trying to convert to unit '{}')"
+            ).format(from_unit, to_unit),
+        )
+    elif to_unit not in conversions[from_unit]:
+        raise ValueError(
+            "Unable to convert from unit '{}' to unit '{}'".format(
+                from_unit,
+                to_unit,
+            ),
+        )
     return conversions[from_unit][to_unit](value)
 
 

@@ -1,0 +1,12 @@
+-
+  meter: cim.coe.cluster
+  service: coe1.cluster
+  type: COE Cluster
+  unit: hour
+  transformer: numbool
+  filters:
+    - "!contains(['CREATE_FAILED'], metadata.status)"
+  metadata:
+    name:
+      sources:
+        - name

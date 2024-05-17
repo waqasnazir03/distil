@@ -1,6 +1,6 @@
 # Copyright (c) 2013 Mirantis Inc.
-# Copyright 2014 Catalyst IT Ltd
-
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -125,6 +125,10 @@ def project_get_all(**filters):
 
 def get_last_collect(project_ids):
     return IMPL.get_last_collect(project_ids)
+
+
+def get_last_collected_all(**filters):
+    return IMPL.get_last_collected_all(**filters)
 
 
 # Project Locks.

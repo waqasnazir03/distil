@@ -1,16 +1,18 @@
-# Copyright (C) 2017 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from datetime import date
 from datetime import datetime
 import json
@@ -48,8 +50,8 @@ class TestAPI(base.APITest):
         )
 
     @mock.patch('distil.erp.drivers.odoo.OdooDriver.get_products')
-    @mock.patch('odoorpc.ODOO')
-    def test_products_get_without_regions(self, mock_odoo,
+    @mock.patch("distil.erp.drivers.odoo.client.Client")
+    def test_products_get_without_regions(self, mock_odoo_client,
                                           mock_odoo_get_products):
         mock_odoo_get_products.return_value = []
 
@@ -58,9 +60,9 @@ class TestAPI(base.APITest):
         self.assertEqual({'products': []}, json.loads(ret.get_data(as_text=True)))
 
     @mock.patch('distil.erp.drivers.odoo.OdooDriver.get_products')
-    @mock.patch('odoorpc.ODOO')
+    @mock.patch("distil.erp.drivers.odoo.client.Client")
     @mock.patch('distil.common.openstack.get_regions')
-    def test_products_get_with_regions(self, mock_regions, mock_odoo,
+    def test_products_get_with_regions(self, mock_regions, mock_odoo_client,
                                        mock_odoo_get_products):
         class Region(object):
             def __init__(self, id):
@@ -145,8 +147,8 @@ class TestAPI(base.APITest):
         )
 
     @mock.patch('distil.erp.drivers.odoo.OdooDriver.get_invoices')
-    @mock.patch('odoorpc.ODOO')
-    def test_invoices_get(self, mock_odoo, mock_get_invoices):
+    @mock.patch("distil.erp.drivers.odoo.client.Client")
+    def test_invoices_get(self, mock_odoo_client, mock_get_invoices):
         default_project = 'tenant_1'
         start = '2014-06-01T00:00:00'
         end = '2014-07-01T00:00:00'
@@ -202,8 +204,8 @@ class TestAPI(base.APITest):
         self.assertEqual(403, json.loads(ret.get_data(as_text=True)).get('error_code'))
 
     @mock.patch('distil.erp.drivers.odoo.OdooDriver.get_quotations')
-    @mock.patch('odoorpc.ODOO')
-    def test_quotations_get(self, mock_odoo, mock_get_quotations):
+    @mock.patch("distil.erp.drivers.odoo.client.Client")
+    def test_quotations_get(self, mock_odoo_client, mock_get_quotations):
         self.override_config('keystone_authtoken', region_name='region-1')
 
         default_project = 'tenant_1'

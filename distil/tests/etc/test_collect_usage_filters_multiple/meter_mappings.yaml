@@ -1,0 +1,15 @@
+-
+  meter: cim.coe.cluster
+  service: coe1.worker
+  type: COE Worker
+  unit: worker
+  transformer: max
+  volume:
+    source: metadata.node_count
+  filters:
+    - to_number(metadata.node_count) >= `3`
+    - to_number(metadata.node_count) < `4`
+  metadata:
+    name:
+      sources:
+        - name

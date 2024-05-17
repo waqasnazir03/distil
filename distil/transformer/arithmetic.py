@@ -1,16 +1,17 @@
-# Copyright 2016 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import datetime
 
@@ -21,6 +22,23 @@ from distil.common import constants
 from distil.common import openstack
 
 LOG = logging.getLogger(__name__)
+
+
+class NumboolTransformer(BaseTransformer):
+    """Transformer for whether a resource existed at all in the
+    given time period.
+
+    If the resource volume is any value higher than 0 is found, then
+    the number of hours within the period is returned as the
+    rated volume. If the resource volume is 0, the rated volume
+    will also be 0.
+    """
+
+    def _transform_usage(self, meter_name, raw_data, start_at, end_at):
+        for sample in raw_data:
+            if sample["volume"] and sample["volume"] > 0:
+                return {meter_name: 1}
+        return {meter_name: 0}
 
 
 class MaxTransformer(BaseTransformer):
@@ -82,7 +100,15 @@ class DatabaseVolumeMaxTransformer(BaseTransformer):
         if not data:
             return None
 
-        max_vol = max([int(v["metadata"]["volume.size"]) for v in data])
+        vols = []
+        for v in data:
+            volume_size = v["metadata"]["volume.size"]
+            try:
+                vol = int(volume_size)
+            except ValueError:
+                vol = int(float(volume_size))
+            vols.append(vol)
+        max_vol = max(vols)
 
         volume_type = openstack.get_volume_type_for_volume(
             data[-1]['metadata']['volume_id'])

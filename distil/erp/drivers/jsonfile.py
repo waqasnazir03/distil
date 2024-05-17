@@ -1,4 +1,4 @@
-# Copyright 2019 Catalyst IT Ltd
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,9 +44,21 @@ class JsonFileDriver(driver.BaseDriver):
     def __init__(self, conf):
         self.conf = conf
 
+    @property
+    def tax_rate(self):
+        return self.conf.jsonfile.tax_rate
+
+    @property
+    def ignore_products_in_quotations(self):
+        if not hasattr(self, "_ignore_products_in_quotations"):
+            self._ignore_products_in_quotations = set(
+                self.conf.jsonfile.ignore_products_in_quotations,
+            )
+        return self._ignore_products_in_quotations
+
     def _load_products(self):
         try:
-            with open(self.conf['jsonfile']['products_file_path']) as fh:
+            with open(self.conf.jsonfile.products_file_path) as fh:
                 products = json.load(fh)
                 return products
         except Exception as e:
@@ -80,30 +92,6 @@ class JsonFileDriver(driver.BaseDriver):
                     region_products[r] = products[r]
             return region_products
         return products
-
-    def create_product(self, product):
-        """Create product in ERP backend.
-
-        :param product: info used to create product
-        """
-        raise NotImplementedError()
-
-    def get_credits(self, project_id, expiry_date):
-        """Get project credits
-
-        :param project_id: Project ID
-        :param expiry_date: Any credit which expires after this date can be
-                            listed
-        :returns list of credits current project can get
-        """
-        raise NotImplementedError()
-
-    def create_credit(self, project, credit):
-        """Create credit for a given project
-
-        :param project: project
-        """
-        raise NotImplementedError()
 
     def _get_invoice_time_ranges(self, start, end):
         previous_months = []
@@ -229,9 +217,11 @@ class JsonFileDriver(driver.BaseDriver):
         {
           '<current_date>': {
             'total_cost': 100,
+            'total_cost': 115,
             'details': {
                 'Compute': {
                     'total_cost': xxx,
+                    'total_cost_taxed': yyy,
                     'breakdown': {}
                 }
             }
@@ -246,6 +236,7 @@ class JsonFileDriver(driver.BaseDriver):
         :return: Current month quotation.
         """
         total_cost = 0
+        total_cost_taxed = 0
         price_mapping = {}
         cost_details = {}
 
@@ -267,11 +258,18 @@ class JsonFileDriver(driver.BaseDriver):
             (service_name, service_type, volume, unit, resource,
              resource_type) = self._get_entry_info(entry, resources_info,
                                                    service_mapping)
+
+            # NOTE(callumdickinson): Remove usage for products
+            # that are on the 'ignored products' list.
+            if service_name in self.ignore_products_in_quotations:
+                continue
+
             res_id = resource['id']
 
             if service_type not in cost_details:
                 cost_details[service_type] = {
                     'total_cost': 0,
+                    'total_cost_taxed': 0,
                     'breakdown': collections.defaultdict(list)
                 }
 
@@ -289,14 +287,26 @@ class JsonFileDriver(driver.BaseDriver):
             )
             cost = (round(volume * price_spec['rate'], constants.PRICE_DIGITS)
                     if price_spec['rate'] else 0)
+            cost_taxed = round(
+                cost * (1 + self.tax_rate),
+                constants.PRICE_DIGITS,
+            )
 
             total_cost += cost
+            total_cost_taxed += cost_taxed
 
             if detailed:
                 erp_service_name = "%s.%s" % (region, service_name)
 
                 cost_details[service_type]['total_cost'] = round(
                     (cost_details[service_type]['total_cost'] + cost),
+                    constants.PRICE_DIGITS
+                )
+                cost_details[service_type]['total_cost_taxed'] = round(
+                    (
+                        cost_details[service_type]['total_cost_taxed']
+                        + cost_taxed
+                    ),
                     constants.PRICE_DIGITS
                 )
                 cost_details[service_type]['breakdown'][
@@ -306,6 +316,7 @@ class JsonFileDriver(driver.BaseDriver):
                         "resource_name": resource.get('name', ''),
                         "resource_id": res_id,
                         "cost": cost,
+                        "cost_taxed": cost_taxed,
                         "quantity": round(volume, 3),
                         "rate": round(price_spec['rate'],
                                       constants.RATE_DIGITS),
@@ -314,7 +325,11 @@ class JsonFileDriver(driver.BaseDriver):
                 )
 
         result = {
-            'total_cost': round(float(total_cost), constants.PRICE_DIGITS)
+            'total_cost': round(float(total_cost), constants.PRICE_DIGITS),
+            'total_cost_taxed': round(
+                float(total_cost_taxed),
+                constants.PRICE_DIGITS,
+            ),
         }
 
         if detailed:

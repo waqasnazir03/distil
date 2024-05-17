@@ -1,0 +1,11 @@
+-
+  meter: cim.coe.cluster
+  service: coe1.worker
+  type: COE Worker
+  unit: worker
+  transformer: max
+  volume: 2
+  metadata:
+    name:
+      sources:
+        - name

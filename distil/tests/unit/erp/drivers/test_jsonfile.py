@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Catalyst Cloud Ltd.
+# Copyright (C) 2013-2024 Catalyst Cloud Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -141,16 +141,19 @@ class TestJsonFileDriver(base.DistilTestCase):
                                         'rate': 0.01,
                                         'resource_id': '47aa',
                                         'cost': 5.0,
+                                        'cost_taxed': 5.75,
                                         'unit': 'hour',
                                         'quantity': 500.0,
                                         'resource_name': 'test-1'
                                     }
                                 ]
                             },
-                            'total_cost': 5.0
+                            'total_cost': 5.0,
+                            'total_cost_taxed': 5.75,
                         }
                     },
                     'total_cost': 5.0,
+                    'total_cost_taxed': 5.75,
                     'status': 'paid',
                 }
             },
@@ -207,7 +210,7 @@ class TestJsonFileDriver(base.DistilTestCase):
         )
 
         self.assertEqual(
-            {'total_cost': 0.03},
+            {'total_cost': 0.03, 'total_cost_taxed': 0.03},
             quotations
         )
 
@@ -264,15 +267,18 @@ class TestJsonFileDriver(base.DistilTestCase):
         self.assertDictEqual(
             {
                 'total_cost': 0.03,
+                'total_cost_taxed': 0.03,
                 'details': {
                     'Compute': {
                         'total_cost': 0.01,
+                        'total_cost_taxed': 0.01,
                         'breakdown': {
                             'nz-1.c1.c2r16': [
                                 {
                                     "resource_name": "instance2",
                                     "resource_id": 2,
                                     "cost": 0.01,
+                                    "cost_taxed": 0.01,
                                     "quantity": 1.0,
                                     "rate": 0.01,
                                     "unit": "hour",
@@ -282,12 +288,132 @@ class TestJsonFileDriver(base.DistilTestCase):
                     },
                     'Block Storage': {
                         'total_cost': 0.02,
+                        'total_cost_taxed': 0.02,
                         'breakdown': {
                             'nz-1.b1.standard': [
                                 {
                                     "resource_name": "volume1",
                                     "resource_id": 1,
                                     "cost": 0.02,
+                                    "cost_taxed": 0.02,
+                                    "quantity": 1.0,
+                                    "rate": 0.02,
+                                    "unit": "gigabyte",
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            quotations
+        )
+
+    @mock.patch('distil.erp.drivers.jsonfile.JsonFileDriver.get_products')
+    def test_get_quotations_with_details_ignore_products(self, mock_get_products):
+        mock_get_products.return_value = {
+            'nz-1': {
+                'Compute': [
+                    {
+                        'name': 'c1.c2r16', 'description': 'c1.c2r16',
+                        'rate': 0.01, 'unit': 'hour'
+                    },
+                ],
+                'Block Storage': [
+                    {
+                        'name': 'b1.standard', 'description': 'b1.standard',
+                        'rate': 0.02, 'unit': 'gigabyte'
+                    },
+                ],
+                'COE': [
+                    {
+                        'name': 'coe1.cluster', 'description': 'COE Cluster',
+                        'full_name': 'NZ-1.coe1.cluster',
+                        'rate': 0.2, 'unit': 'hour'
+                    },
+                    {
+                        'name': 'coe1.worker', 'description': 'COE Worker',
+                        'full_name': 'NZ-1.coe1.worker',
+                        'rate': 0.05, 'unit': 'worker'
+                    },
+                ],
+            },
+        }
+
+        class Resource(object):
+            def __init__(self, id, info):
+                self.id = id
+                self.info = info
+
+        resources = [
+            Resource(1, '{"name": "volume1", "type": "Volume"}'),
+            Resource(2, '{"name": "instance2", "type": "Virtual Machine"}')
+        ]
+
+        usage = [
+            {
+                'service': 'b1.standard',
+                'resource_id': 1,
+                'volume': 1024 * 1024 * 1024,
+                'unit': 'byte',
+            },
+            {
+                'service': 'c1.c2r16',
+                'resource_id': 2,
+                'volume': 3600,
+                'unit': 'second',
+            },
+            {
+                'service': 'coe1.cluster',
+                'resource_id': 3,
+                'volume': 1,
+                'unit': 'hour',
+            },
+            {
+                'service': 'coe1.worker',
+                'resource_id': 3,
+                'volume': 3,
+                'unit': 'worker',
+            },
+        ]
+
+        jf = jsonfile.JsonFileDriver(self.conf)
+        quotations = jf.get_quotations(
+            'nz-1', 'fake_id', measurements=usage, resources=resources,
+            detailed=True
+        )
+
+        self.assertDictEqual(
+            {
+                'total_cost': 0.03,
+                'total_cost_taxed': 0.03,
+                'details': {
+                    'Compute': {
+                        'total_cost': 0.01,
+                        'total_cost_taxed': 0.01,
+                        'breakdown': {
+                            'nz-1.c1.c2r16': [
+                                {
+                                    "resource_name": "instance2",
+                                    "resource_id": 2,
+                                    "cost": 0.01,
+                                    "cost_taxed": 0.01,
+                                    "quantity": 1.0,
+                                    "rate": 0.01,
+                                    "unit": "hour",
+                                }
+                            ],
+                        }
+                    },
+                    'Block Storage': {
+                        'total_cost': 0.02,
+                        'total_cost_taxed': 0.02,
+                        'breakdown': {
+                            'nz-1.b1.standard': [
+                                {
+                                    "resource_name": "volume1",
+                                    "resource_id": 1,
+                                    "cost": 0.02,
+                                    "cost_taxed": 0.02,
                                     "quantity": 1.0,
                                     "rate": 0.02,
                                     "unit": "gigabyte",
