@@ -20,6 +20,7 @@ from ceilometerclient import client as ceilometerclient
 from cinderclient.v2 import client as cinderclient
 from cinderclient.exceptions import NotFound as CinderNotFound
 from glanceclient import client as glanceclient
+from gnocchiclient import client as gnocchiclient
 from keystoneauth1.identity import v3
 from keystoneauth1.exceptions import NotFound
 from keystoneauth1 import session
@@ -64,6 +65,15 @@ def get_ceilometer_client():
 
     return ceilometerclient.get_client(
         '2',
+        session=sess,
+        region_name=CONF.keystone_authtoken.region_name
+    )
+
+def get_gnocchi_client():
+    sess = _get_keystone_session()
+
+    return gnocchiclient.Client(
+        '1',
         session=sess,
         region_name=CONF.keystone_authtoken.region_name
     )
