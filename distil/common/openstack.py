@@ -73,8 +73,7 @@ def get_gnocchi_client():
     sess = _get_keystone_session()
 
     return gnocchiclient.Client(
-        '1',
-        session=sess,
+        '1', session=sess,
         region_name=CONF.keystone_authtoken.region_name
     )
 

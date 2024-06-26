@@ -68,8 +68,9 @@ class GnocchiCollector(base.BaseCollector):
             dict(field='timestamp', op='lt',
                  value=end.strftime(constants.date_format)),
         ]
-        LOG.error("Here is query"+str(query))
 
+        sample_objs = self._get_gnocchi_client().resource.list(resource_type=meter, details=True)
+        return sample_objs
         """sample_objs = self._get_ceilometer_client().new_samples.list(q=query)
 
         return [
@@ -79,5 +80,5 @@ class GnocchiCollector(base.BaseCollector):
             # but there have been cases where the response from the API
             # is not actually sorted, so explicitly sort the structure
             # to reverse the order here.
-            for obj in sorted(sample_objs, key=lambda s: s.timestamp)
+            for obj in sorted(sample_objs, key=lambda s: s.started_at)
         ]"""
