@@ -70,6 +70,9 @@ class GnocchiCollector(base.BaseCollector):
         ]
 
         sample_objs = self._get_gnocchi_client().resource.list(resource_type=meter, details=True)
+        for obj in sample_objs:
+            obj["source"]= "openstack"
+            obj["resource_id"] = obj.get("id")
         return sample_objs
         """sample_objs = self._get_ceilometer_client().new_samples.list(q=query)
 

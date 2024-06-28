@@ -74,7 +74,7 @@ def get_gnocchi_client():
 
     return gnocchiclient.Client(
         '1', session=sess,
-        region_name=CONF.keystone_authtoken.region_name
+        #region_name=CONF.keystone_authtoken.region_name
     )
 
 
