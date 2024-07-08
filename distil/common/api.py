@@ -160,8 +160,8 @@ def request_data():
         LOG.debug("Empty body provided in request")
         return dict()
 
-    if flask.request.file_upload:
-        return flask.request.data
+    #if flask.request.file_upload:
+    #    return flask.request.data
 
     deserializer = None
     content_type = flask.request.mimetype

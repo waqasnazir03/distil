@@ -12,6 +12,7 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 
 from dateutil import parser
 from oslo_log import log
@@ -61,6 +62,12 @@ def _get_request_args():
     return params
 
 
+@rest.post('/collect')
+def collect_post(data):
+    #LOG.error(flask.request.authorization)
+    #LOG.error(json.dumps(data))
+    return "test"
+
 @rest.get('/health')
 @acl.enforce("health:get")
 def health_get():
@@ -83,7 +90,6 @@ def products_get():
                 (list(set(regions) - set(actual_regions)),
                  actual_regions)
             )
-
     return api.render(products=products.get_products(regions))
 
 
