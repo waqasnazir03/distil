@@ -183,6 +183,8 @@ def request_data():
 def get_request_args():
     return flask.request.args
 
+def get_request_creds():
+    return flask.request.authorization
 
 def abort_and_log(status_code, descr, exc=None):
     LOG.error(("Request aborted with status code %(code)s and "
