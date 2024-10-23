@@ -121,28 +121,26 @@ def collect_post(data):
     }
     ]
     """
-    #creds = api.get_request_creds()
+    # Data posted by ceilometer
+    LOG.error(meters)
+
+    # Below this point we are trying to transform data in a way so it can be fed to distil. These are mostly work arouds atm.
     meter_mapping=[{'meter': 'instance', 'type': 'Virtual Machine', 'transformer': 'uptime', 'unit': 'second', 'metadata': {'name': {'sources': ['display_name']}, 'availability zone': {'sources': ['OS-EXT-AZ:availability_zone']}, 'host': {'sources': ['host']}}}]
     uptime_transformer = {'uptime': {'tracked_states': ['active', 'paused', 'rescue', 'rescued', 'resize', 'resized', 'verify_resize', 'suspended', 'shutoff', 'stopped']}}
-    LOG.error(meters)
     resource_id=None
     if len(data) and data[0].get("resource_id"):
         resource_id = data[0].get("resource_id")
     else:
         return "Invalid data"
     usage_data = {resource_id: data}
-    LOG.error(usage_data)
     vm_mapping=meter_mapping[0]
 
     service = (vm_mapping['service'] if 'service' in vm_mapping
                    else vm_mapping['meter'])
-    LOG.error(service)
     transformer = d_transformer.get_transformer(
             vm_mapping['transformer'],
             override_config=vm_mapping.get('transformer_config', {}))
 
-    #LOG.error(service)
-    #LOG.error(transformer)
     """
     transformed = transformer.transform_usage(
                 service, entries, window_start, window_end
